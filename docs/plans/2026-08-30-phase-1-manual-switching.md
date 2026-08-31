@@ -22,7 +22,7 @@
 - **The rate setter must read the rate back after setting it.** A `noErr` status is not proof the driver applied the change.
 - **Probes are self-contained single files.** Deliberate duplication of ~40 lines of CoreAudio helpers across the three Swift files is an accepted, documented trade — a reader can copy one file and run it. Do not factor them into a shared file.
 - **Conventional Commits.** The PR title is what release-please reads on squash-merge. `docs:` and `chore:` are changelog-only; `feat:` bumps the minor version. Shipping the phase specs is the `feat:`.
-- **Scratchpad code is throwaway.** Working probe code exists at `/private/tmp/claude-501/-Users-ryan-GitHub/774198f3-6c8f-4b39-a69c-d9c57fe9dffd/scratchpad/{rate,watch}.swift`. Read it for the CoreAudio call shapes, then rewrite. Do not copy it: it is unstructured and carries a compiler warning.
+- **The Swift in this plan is authoritative.** Do not copy CoreAudio call shapes from anywhere else. The throwaway code that established them read the device name into a `CFString` variable — an ARC hazard that warns. The `Unmanaged<CFString>` pattern in Task 2 is the fix, and `-warnings-as-errors` in CI is what keeps it fixed.
 - **Target:** macOS 12+ (`kAudioObjectPropertyElementMain`). Developed against macOS 26.6.2.
 
 ## A note on this plan's shape
