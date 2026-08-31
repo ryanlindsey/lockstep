@@ -26,6 +26,7 @@ watching for 8 seconds…
   t+0.5s: 192000 Hz
   …
   t+8.0s: 192000 Hz
+restored to 44100 Hz
 
 RESULT: nothing corrected the rate — macOS does not follow the source.
 ```

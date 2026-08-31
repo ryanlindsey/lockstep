@@ -70,9 +70,10 @@ the source and lockstep has no job to do. Please
 [tell us](https://github.com/ryanlindsey/lockstep/issues/new?template=probe-report.yml)
 — that is a far more interesting result than the expected one.
 
-**If the probe reported `INCONCLUSIVE`,** your device advertised a rate it would
-not actually hold. Nothing can be concluded either way. That is also worth
-reporting, and you should test a different rate before continuing.
+**If the probe reported `INCONCLUSIVE`,** your device either advertised a rate
+it would not actually hold or stopped reporting its rate part way through.
+Nothing can be concluded either way. That is also worth reporting, and you
+should test a different rate before continuing.
 
 ## What this changes downstream
 

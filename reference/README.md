@@ -12,7 +12,10 @@ of the repo. Reading the answer first is allowed, but it is not the exercise.
 
 ## Build
 
+From the repository root:
+
 ```
+mkdir -p ~/bin
 swiftc -O reference/lockstep.swift -o ~/bin/lockstep
 ```
 
@@ -44,9 +47,11 @@ rate that was requested. `setRate` polls until the device confirms, because a
 
 ## Acceptance tests
 
+Also from the repository root:
+
 ```
 swiftc -O reference/lockstep.swift -o /tmp/lockstep
-./test-lockstep.sh /tmp/lockstep
+./reference/test-lockstep.sh /tmp/lockstep
 ```
 
 > **This changes your device's sample rate twice and is audible.** It reads the

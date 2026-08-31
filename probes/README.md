@@ -42,8 +42,9 @@ Three outcomes:
   has a job. This is the expected result.
 - **Something corrected the rate** — stop here. lockstep has nothing to do on
   your system, and you should tell us about it in a probe report.
-- **Inconclusive** — your device advertised a rate it would not actually hold.
-  Nothing can be concluded either way. Worth a probe report too.
+- **Inconclusive** — your device advertised a rate it would not actually hold,
+  or it stopped reporting its rate part way through. Nothing can be concluded
+  either way. Worth a probe report too.
 
 That third case is why the probe confirms the device *reached* the forced rate
 before watching it. A device that cannot hold a rate it advertises otherwise

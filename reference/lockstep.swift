@@ -56,7 +56,7 @@ func currentRate(of device: AudioDeviceID) -> Double? {
     return status == noErr ? rate : nil
 }
 
-func supportedRates(of device: AudioDeviceID) -> [Double] {
+func supportedRanges(of device: AudioDeviceID) -> [AudioValueRange] {
     var addr = address(kAudioDevicePropertyAvailableNominalSampleRates)
     var size = UInt32(0)
     guard AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size) == noErr else { return [] }
@@ -68,8 +68,21 @@ func supportedRates(of device: AudioDeviceID) -> [Double] {
         return []
     }
     return ranges
+}
+
+// Endpoints, for display. Most USB DACs report discrete rates (mMinimum ==
+// mMaximum); a few report a continuous span, and both ends are shown.
+func rates(in ranges: [AudioValueRange]) -> [Double] {
+    ranges
         .flatMap { $0.mMinimum == $0.mMaximum ? [$0.mMinimum] : [$0.mMinimum, $0.mMaximum] }
         .sorted()
+}
+
+// Membership has to consult the ranges, not the flattened endpoints: a device
+// reporting a continuous span supports every rate between its two ends, and
+// checking against the endpoint list alone would reject rates it accepts.
+func supports(_ rate: Double, _ ranges: [AudioValueRange]) -> Bool {
+    ranges.contains { rate >= $0.mMinimum && rate <= $0.mMaximum }
 }
 
 enum SetResult {
@@ -123,7 +136,7 @@ guard let device = defaultOutputDevice() else {
 }
 
 if arguments.isEmpty {
-    let available = supportedRates(of: device)
+    let available = rates(in: supportedRanges(of: device))
     print("device:    \(name(of: device))")
     print("current:   \(currentRate(of: device).map { String(format: "%.0f Hz", $0) } ?? "unknown")")
     print("supported: \(available.isEmpty ? "none reported" : formatted(available))")
@@ -135,18 +148,26 @@ if arguments[0] == "--help" || arguments[0] == "-h" {
     exit(0)
 }
 
-guard let target = Double(arguments[0]), target > 0 else {
+// `.isFinite` is load-bearing: Double("inf") and Double("1e30") both parse and
+// are both greater than zero, and formatting either as an Int traps.
+guard let target = Double(arguments[0]), target.isFinite, target > 0 else {
     die("not a sample rate: \(arguments[0])\n\n\(usage)")
 }
 
-let rates = supportedRates(of: device)
-guard rates.contains(target) else {
-    die("\(name(of: device)) does not support \(Int(target)) Hz\nsupported: \(formatted(rates))")
+let ranges = supportedRanges(of: device)
+guard !ranges.isEmpty else {
+    die("\(name(of: device)) reports no sample rates")
+}
+guard supports(target, ranges) else {
+    die("""
+        \(name(of: device)) does not support \(arguments[0]) Hz
+        supported: \(formatted(rates(in: ranges)))
+        """)
 }
 
 switch setRate(target, on: device) {
 case .verified(let rate):
-    print("\(name(of: device)) → \(Int(rate)) Hz")
+    print("\(name(of: device)) → \(String(format: "%.0f", rate)) Hz")
 case .failed(let reason):
     die(reason)
 }

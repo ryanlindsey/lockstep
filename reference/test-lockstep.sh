@@ -36,6 +36,13 @@ echo "$status_output" | grep -q '^supported:' ; report $? "no-arg output lists s
 original="$(echo "$status_output" | awk '/^current:/ {print $2}')"
 supported="$(echo "$status_output" | sed -n 's/^supported: *//p')"
 
+# Without a readable starting rate, every comparison below compares "" to "" and
+# passes without testing anything. Stop instead.
+if [ -z "$original" ] || [ "$original" = "unknown" ]; then
+  echo "cannot read the current rate from $BIN — aborting" >&2
+  exit 1
+fi
+
 # --- criterion 2: an unsupported rate fails cleanly and changes nothing ---
 "$BIN" 1234 >/dev/null 2>&1
 [ $? -ne 0 ]; report $? "unsupported rate exits non-zero"
@@ -44,9 +51,13 @@ after="$("$BIN" | awk '/^current:/ {print $2}')"
 [ "$after" = "$original" ]; report $? "unsupported rate left the device unchanged"
 
 # --- criterion 1: a supported rate is set and verified ---
-target="$(echo "$supported" | tr ',' '\n' | tr -d ' ' | grep -v "^${original}$" | head -1)"
+if [ "$supported" = "none reported" ]; then
+  target=""
+else
+  target="$(echo "$supported" | tr ',' '\n' | tr -d ' ' | grep -v "^${original}$" | head -1)"
+fi
 if [ -z "$target" ]; then
-  echo "SKIP  device reports only one rate; nothing to switch to"
+  echo "SKIP  device reports no other rate to switch to"
 else
   "$BIN" "$target" >/dev/null 2>&1
   [ $? -eq 0 ]; report $? "setting a supported rate exits zero"

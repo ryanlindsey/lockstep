@@ -10,6 +10,15 @@
 
 **Spec:** `docs/design/2026-08-30-repo-design.md`
 
+> **This is a historical artefact, preserved as executed.** A code review run
+> after execution found real bugs in the shipped Swift — a crash on `lockstep inf`,
+> a membership test that rejected valid rates on continuous-range devices, and a
+> probe that reported a failed read as a correction. Those are fixed in `probes/`
+> and `reference/`, and the code listings below have deliberately **not** been
+> updated to match: they record what was planned, not what shipped.
+>
+> **Where they differ, the repo is correct and this document is not.**
+
 **Plan location note:** The writing-plans default is `docs/superpowers/plans/`. This repo uses `docs/plans/` to match the `docs/design/` convention chosen for the spec — a public repo shouldn't leak tooling names into its structure.
 
 ## Global Constraints
@@ -22,7 +31,7 @@
 - **The rate setter must read the rate back after setting it.** A `noErr` status is not proof the driver applied the change.
 - **Probes are self-contained single files.** Deliberate duplication of ~40 lines of CoreAudio helpers across the three Swift files is an accepted, documented trade — a reader can copy one file and run it. Do not factor them into a shared file.
 - **Conventional Commits.** The PR title is what release-please reads on squash-merge. `docs:` and `chore:` are changelog-only; `feat:` bumps the minor version. Shipping the phase specs is the `feat:`.
-- **The Swift in this plan is authoritative.** Do not copy CoreAudio call shapes from anywhere else. The throwaway code that established them read the device name into a `CFString` variable — an ARC hazard that warns. The `Unmanaged<CFString>` pattern in Task 2 is the fix, and `-warnings-as-errors` in CI is what keeps it fixed.
+- **The Swift in `probes/` and `reference/` is authoritative** — not the listings in this plan, which post-date it (see the note above). The listings were authoritative *at execution time*, and the `Unmanaged<CFString>` pattern they introduced is still the required one: reading a device name into a `CFString` variable is an ARC hazard, and `-warnings-as-errors` in CI is what keeps it fixed.
 - **Target:** macOS 12+ (`kAudioObjectPropertyElementMain`). Developed against macOS 26.6.2.
 
 ## A note on this plan's shape

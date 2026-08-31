@@ -79,6 +79,21 @@ func settles(at target: Double, on device: AudioDeviceID) -> Bool {
     return false
 }
 
+// Restoring is a rate change like any other, so it is read back too. Saying
+// "restored" without checking would be the same unproven claim the probe exists
+// to warn about — and would leave a reader's DAC at the wrong rate in silence.
+func restore(_ original: Double, on device: AudioDeviceID) {
+    forceRate(original, on: device)
+    if settles(at: original, on: device) {
+        print("restored to \(Int(original)) Hz")
+    } else {
+        let observed = currentRate(of: device).map { String(format: "%.0f", $0) } ?? "unknown"
+        FileHandle.standardError.write(Data(
+            "WARNING: could not restore \(Int(original)) Hz — device reports \(observed) Hz.\n"
+                .utf8))
+    }
+}
+
 guard let device = defaultOutputDevice(), let original = currentRate(of: device) else {
     FileHandle.standardError.write(Data("no default output device\n".utf8))
     exit(1)
@@ -87,9 +102,9 @@ guard let device = defaultOutputDevice(), let original = currentRate(of: device)
 // Pick a supported rate that is deliberately wrong: the highest available,
 // unless we are already there, in which case the lowest.
 let rates = supportedRates(of: device)
-guard rates.count > 1, let highest = rates.last, let lowest = rates.first else {
+guard let lowest = rates.first, let highest = rates.last, lowest != highest else {
     FileHandle.standardError.write(
-        Data("device reports fewer than two rates; nothing to test\n".utf8))
+        Data("device reports fewer than two distinct rates; nothing to test\n".utf8))
     exit(1)
 }
 let wrong = (original == highest) ? lowest : highest
@@ -106,25 +121,37 @@ guard forceRate(wrong, on: device) else {
 // looks identical to macOS auto-switching — and would tell you, wrongly, that
 // you do not need lockstep.
 guard settles(at: wrong, on: device) else {
-    forceRate(original, on: device)
+    restore(original, on: device)
     print("")
     print("INCONCLUSIVE: the device advertises \(Int(wrong)) Hz but would not hold it.")
-    print("Nothing can be concluded about auto-switching. Restored \(Int(original)) Hz.")
+    print("Nothing can be concluded about auto-switching.")
     exit(1)
 }
 
 print("watching for 8 seconds…")
 var corrected = false
+var unreadable = false
 for tick in 1...16 {
     usleep(500_000)
-    let now = currentRate(of: device) ?? 0
+    // A failed read is not a correction. Treating it as one — the device was
+    // unplugged, or CoreAudio returned an error — would tell the reader that
+    // something follows the source and that they do not need lockstep.
+    guard let now = currentRate(of: device) else {
+        print(String(format: "  t+%.1fs: could not read the rate", Double(tick) * 0.5))
+        unreadable = true
+        break
+    }
     print(String(format: "  t+%.1fs: %.0f Hz", Double(tick) * 0.5, now))
     if now != wrong { corrected = true; break }
 }
 
-forceRate(original, on: device)
-print("restored to \(Int(original)) Hz")
+restore(original, on: device)
 print("")
+if unreadable {
+    print("INCONCLUSIVE: the device stopped reporting its rate — was it unplugged?")
+    print("Nothing can be concluded about auto-switching.")
+    exit(1)
+}
 print(corrected
     ? "RESULT: something corrected the rate — lockstep may be unnecessary on this system."
     : "RESULT: nothing corrected the rate — macOS does not follow the source. lockstep has a job.")
