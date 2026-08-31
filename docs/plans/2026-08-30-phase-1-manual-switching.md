@@ -50,7 +50,7 @@ So: **code and configuration appear in full** (Swift, YAML, JSON — these must 
 | `probes/device-capabilities.swift` | Read-only: device name, current rate, supported rates |
 | `probes/does-macos-autoswitch.swift` | Forces a wrong rate, watches, restores |
 | `probes/README.md` | How to run them, and why they're duplicated |
-| `docs/decisions/0001..0006-*.md` | One decision each, with priors and evidence |
+| `docs/decisions/0001..0007-*.md` | One decision each, with priors and evidence |
 | `docs/decisions/README.md` | The narrated arc |
 | `docs/method.md` | The six-step loop, agent-neutral |
 | `specs/phase-0-probe-your-hardware.md` | Produces the reader's hardware profile |
@@ -450,7 +450,7 @@ git commit -m "probe: add device-capabilities and does-macos-autoswitch"
 ### Task 3: The decision log
 
 **Files:**
-- Create: `docs/decisions/README.md`, `docs/decisions/0001-detect-via-scriptingbridge.md`, `docs/decisions/0002-match-rate-only.md`, `docs/decisions/0003-jxa-cannot-reach-coreaudio.md`, `docs/decisions/0004-macos-does-not-autoswitch.md`, `docs/decisions/0005-scripts-not-an-app.md`, `docs/decisions/0006-build-rather-than-adopt.md`
+- Create: `docs/decisions/README.md`, `docs/decisions/0001-detect-via-scriptingbridge.md`, `docs/decisions/0002-match-rate-only.md`, `docs/decisions/0003-jxa-cannot-reach-coreaudio.md`, `docs/decisions/0004-macos-does-not-autoswitch.md`, `docs/decisions/0005-scripts-not-an-app.md`, `docs/decisions/0006-build-rather-than-adopt.md`, `docs/decisions/0007-ci-compiles-not-typechecks.md`
 
 **Interfaces:**
 - Consumes: probe output formats from Task 2 (0004 quotes `does-macos-autoswitch` output)
@@ -515,12 +515,19 @@ git commit -m "probe: add device-capabilities and does-macos-autoswitch"
 - Explicitly do **not** write it on code-quality grounds, and do not name shortcomings of the other project. It is more useful to a reader as a transferable distinction, and a public repo that opens by criticising another developer's freely-given work invites an argument this project has no interest in having.
 - Consequences: be honest that hardware-level problems — DAC relock clicks, devices misreporting supported rates, dropouts on format change — are inherent to changing sample rates on real USB hardware and are inherited by *any* implementation, including this one. Adopting a different detector does not avoid them.
 
+**0007 — CI compiles rather than typechecks.** *Decided by: agent-proposed → human-accepted.*
+- Believed going in: `swiftc -typecheck -warnings-as-errors` would catch the `CFString` raw-pointer warning. This was written into the approved plan as an explicit guarantee, and it survived a self-review pass before being merged.
+- Probed, during execution rather than design: the same naive `CFString` read was compiled both ways. Under `-typecheck` it emitted no warning and exited 0. Under a full compile it emitted `warning: forming 'UnsafeMutableRawPointer' to a variable of type 'CFString'` and, with `-warnings-as-errors`, exited non-zero. Quote both results.
+- Decision: `build.yml` performs a full compile into a temporary directory. Never `-typecheck`. Compiling is still not executing, so the never-execute rule is unaffected.
+- Consequences: CI is slightly slower, and in exchange the guarantee is real. **State the trap plainly:** reverting to `-typecheck` looks like a harmless speed-up, keeps the build green, and silently removes the only protection against the regression it was written to prevent.
+- Worth noting in the narrated README: this is the only record whose wrong prior came from an approved, merged plan rather than from early design. The loop caught the plan, not just the idea.
+
 - [ ] **Step 3: Write `docs/decisions/README.md`**
 
 Required content:
 - A one-paragraph explanation of the two non-standard ADR fields and why they exist: `What we believed going in` (standard ADRs record the conclusion and launder away the author's wrong prior, which is the part that teaches judgment) and `Decided by` (the human/agent mix is the honest texture of this kind of work).
 - **The narrated arc**, in order, as prose rather than a list: the project began as a native menubar app; a probe disproved the agent's confident assumption about detection (0001); a YAGNI call on bit depth (0002) later turned out to be the only thing that made another route evaluable (0003); a premise check nearly ended the project (0004); and the app collapsed into roughly a hundred lines of script (0005).
-- A table of all six with links.
+- A table of all seven with links.
 - Done when: a reader who reads only this file understands both what was decided and where the reasoning went wrong, and can find any individual record.
 
 - [ ] **Step 4: Check every link resolves**
@@ -1277,5 +1284,5 @@ The title carries `feat:` because this PR ships the phase specs. On squash-merge
 - `./reference/test-lockstep.sh` passes every criterion on real hardware
 - Every Swift file compiles clean under `swiftc -warnings-as-errors` with no output
 - A reader can go from a fresh clone to a working pinned menu bar Shortcut using only `README.md` → `specs/phase-0` → `specs/phase-1`
-- `docs/decisions/` contains all six records, each with a `What we believed going in` section that is actually filled in
+- `docs/decisions/` contains all seven records, each with a `What we believed going in` section that is actually filled in
 - No file outside `AGENTS.md`'s pointer line names a specific agent
