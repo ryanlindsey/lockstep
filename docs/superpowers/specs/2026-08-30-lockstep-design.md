@@ -34,7 +34,7 @@ that is a side effect, not the goal.
 |---|---|
 | Automation level | Automatic switching, with manual override as escape hatch |
 | Sources | Apple Music now, behind a source seam so others can be added |
-| Devices | Opt-in allowlist; act only when an enabled device is default output |
+| Devices | Opt-in allowlist, phase 2 only; manual invocation is explicit intent and needs no guard |
 | Distribution | Public GitHub repo; scripts, not a notarized app |
 | Bit depth | Match sample rate only; pin depth at device maximum |
 | What ships | Specs + reference implementation, clearly separated |
@@ -83,6 +83,8 @@ lockstep/
 │       ├── links.yml            link checker
 │       └── release-please.yml
 ├── release-please-config.json
+├── .release-please-manifest.json
+├── version.txt                  maintained by release-please
 ├── docs/
 │   ├── method.md                the loop, agent-neutral
 │   └── decisions/
@@ -238,6 +240,12 @@ Acceptance criteria:
 These encode the switching rules as tests: 400 ms debounce and coalescing,
 play-state gate, device allowlist, no-op guard.
 
+**The source seam, concretely.** Phase 2 defines a `NowPlayingSource` protocol
+(one method: current source rate, or nil) with `MusicSource` as its only
+conformance, in the same file. Roughly five lines. It is named here so it is
+not mistaken for package architecture: at this size the seam is a naming
+convention that marks where a second source would attach, nothing more.
+
 **Fallback rule:** if a source rate is unsupported, choose the nearest supported
 *integer multiple* (44.1 → 88.2 → 176.4), never crossing families to 48. Does
 not trigger on the reference hardware; matters for readers with limited devices.
@@ -292,8 +300,8 @@ without priors does.
   logic may simplify.
 - **Does `com.apple.Music.playerInfo` fire reliably on macOS 26?** Assumed, not
   verified — a `log stream` test was the wrong instrument, as distributed
-  notifications are not `os_log` events. Phase 2 therefore specifies a 1–2 s
-  poll while playing as a fallback, to be used only if the notification proves
+  notifications are not `os_log` events. Phase 2 therefore specifies a 2 s poll while
+  playing as a fallback, to be used only if the notification proves
   unreliable during implementation.
 - **`reference/lockstep.swift` has a known compiler warning** reading the device
   name `CFString` through a raw pointer. It works, but it must be fixed before
