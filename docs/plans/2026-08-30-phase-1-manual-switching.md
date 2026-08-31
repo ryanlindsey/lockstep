@@ -374,6 +374,16 @@ func forceRate(_ target: Double, on device: AudioDeviceID) -> Bool {
     return status == noErr
 }
 
+// Poll until the device reports `target`, or give up. A noErr status is not
+// proof the driver applied the change — the same rule lockstep itself follows.
+func settles(at target: Double, on device: AudioDeviceID) -> Bool {
+    for _ in 0..<20 {
+        usleep(50_000)
+        if currentRate(of: device) == target { return true }
+    }
+    return false
+}
+
 guard let device = defaultOutputDevice(), let original = currentRate(of: device) else {
     FileHandle.standardError.write(Data("no default output device\n".utf8))
     exit(1)
@@ -393,6 +403,18 @@ print("original rate: \(Int(original)) Hz")
 print("forcing:       \(Int(wrong)) Hz  (deliberately wrong)")
 guard forceRate(wrong, on: device) else {
     FileHandle.standardError.write(Data("could not set the rate; aborting\n".utf8))
+    exit(1)
+}
+
+// Confirm the device actually arrived before treating any later change as a
+// correction. Without this, a device that advertises a rate it cannot hold
+// looks identical to macOS auto-switching — and would tell you, wrongly, that
+// you do not need lockstep.
+guard settles(at: wrong, on: device) else {
+    forceRate(original, on: device)
+    print("")
+    print("INCONCLUSIVE: the device advertises \(Int(wrong)) Hz but would not hold it.")
+    print("Nothing can be concluded about auto-switching. Restored \(Int(original)) Hz.")
     exit(1)
 }
 
