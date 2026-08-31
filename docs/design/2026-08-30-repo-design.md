@@ -88,7 +88,7 @@ lockstep/
 ├── docs/
 │   ├── method.md                the loop, agent-neutral
 │   ├── design/
-│   │   └── 2026-08-30-lockstep-design.md   this document
+│   │   └── 2026-08-30-repo-design.md       this document
 │   └── decisions/
 │       ├── README.md            the arc, narrated
 │       └── 0001..0006-*.md      one decision per file
