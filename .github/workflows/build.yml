@@ -1,0 +1,31 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Compile only. Never execute: a GitHub runner has no USB DAC, so any
+      # probe or lockstep output here would be meaningless.
+      #
+      # A full compile, not -typecheck. The CFString raw-pointer warning this
+      # job exists to catch is emitted during lowering, so -typecheck misses it.
+      # See docs/decisions/0007-ci-compiles-not-typechecks.md before "speeding
+      # this up".
+      - name: Compile every Swift file, warnings are errors
+        run: |
+          set -e
+          out="$(mktemp -d)"
+          for file in probes/*.swift reference/*.swift; do
+            echo "==> $file"
+            swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"
+          done
+
+      - name: Shell scripts parse
+        run: bash -n reference/test-lockstep.sh
