@@ -17,7 +17,7 @@
 - **No third-party dependencies.** Foundation and CoreAudio only.
 - **No Xcode project, no SPM manifest.** `swiftc` compiles single files.
 - **No log scraping, no private APIs, no MediaRemote.** Public documented API only.
-- **Every Swift file must compile with `swiftc -typecheck -warnings-as-errors` and zero output.** This is enforced in CI and is how the known `CFString` raw-pointer warning is kept from returning.
+- **Every Swift file must compile clean under `swiftc -warnings-as-errors`, with zero output.** A *full compile*, not `-typecheck`. Verified: the `CFString` raw-pointer warning this rule exists to catch is emitted during lowering, so `-typecheck` exits 0 on code that carries it. Compiling is still not executing, so the never-execute rule below is unaffected.
 - **CI compiles Swift; CI never executes it.** A GitHub runner has no USB DAC, so probe or `lockstep` output there would be meaningless.
 - **The rate setter must read the rate back after setting it.** A `noErr` status is not proof the driver applied the change.
 - **Probes are self-contained single files.** Deliberate duplication of ~40 lines of CoreAudio helpers across the three Swift files is an accepted, documented trade — a reader can copy one file and run it. Do not factor them into a shared file.
@@ -289,7 +289,7 @@ print("supported: \(rates.isEmpty ? "none reported" : rates.map { String(format:
 - [ ] **Step 2: Verify it compiles with zero warnings**
 
 ```bash
-swiftc -typecheck -warnings-as-errors probes/device-capabilities.swift && echo "PASS"
+swiftc -warnings-as-errors -o /tmp/device-capabilities probes/device-capabilities.swift && echo "PASS"
 ```
 Expected: `PASS` with no other output. If the `CFString` warning appears, the `Unmanaged` pattern in `name(of:)` was not followed.
 
@@ -416,7 +416,7 @@ print(corrected
 - [ ] **Step 5: Verify it compiles with zero warnings**
 
 ```bash
-swiftc -typecheck -warnings-as-errors probes/does-macos-autoswitch.swift && echo "PASS"
+swiftc -warnings-as-errors -o /tmp/does-macos-autoswitch probes/does-macos-autoswitch.swift && echo "PASS"
 ```
 Expected: `PASS` with no other output.
 
@@ -618,7 +618,7 @@ Note: `feat:` here is deliberate and is the only `feat:` in this plan. It is wha
 
 **Interfaces:**
 - Consumes: the CLI contract and acceptance criteria from `specs/phase-1-manual-switching.md` (Task 4); the CoreAudio helper shapes from Task 2
-- Produces: a `lockstep` binary that `.github/workflows/build.yml` (Task 6) typechecks and `README.md` (Task 9) links to
+- Produces: a `lockstep` binary that `.github/workflows/build.yml` (Task 6) compiles and `README.md` (Task 9) links to
 
 - [ ] **Step 1: Write `reference/lockstep.swift`**
 
@@ -780,7 +780,7 @@ case .failed(let reason):
 - [ ] **Step 2: Verify it compiles with zero warnings**
 
 ```bash
-swiftc -typecheck -warnings-as-errors reference/lockstep.swift && echo "PASS"
+swiftc -warnings-as-errors -o /tmp/lockstep reference/lockstep.swift && echo "PASS"
 ```
 Expected: `PASS` with no other output.
 
@@ -924,19 +924,22 @@ on:
   pull_request:
 
 jobs:
-  typecheck:
+  compile:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       # Compile only. Never execute: a GitHub runner has no USB DAC, so any
       # probe or lockstep output here would be meaningless.
-      - name: Typecheck every Swift file, warnings are errors
+      # A full compile, not -typecheck. The CFString raw-pointer warning this
+      # job exists to catch is emitted during lowering, so -typecheck misses it.
+      - name: Compile every Swift file, warnings are errors
         run: |
           set -e
+          out="$(mktemp -d)"
           for file in probes/*.swift reference/*.swift; do
             echo "==> $file"
-            swiftc -typecheck -warnings-as-errors "$file"
+            swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"
           done
 
       - name: Shell scripts parse
@@ -946,8 +949,9 @@ jobs:
 - [ ] **Step 2: Reproduce the CI check locally before pushing**
 
 ```bash
-set -e; for file in probes/*.swift reference/*.swift; do
-  echo "==> $file"; swiftc -typecheck -warnings-as-errors "$file"; done
+set -e; out="$(mktemp -d)"
+for file in probes/*.swift reference/*.swift; do
+  echo "==> $file"; swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"; done
 bash -n reference/test-lockstep.sh && echo "PASS"
 ```
 Expected: each filename echoed, no warnings, `PASS`.
@@ -979,7 +983,7 @@ jobs:
 
 ```bash
 git add .github/workflows/
-git commit -m "ci: typecheck swift on macos and check links"
+git commit -m "ci: compile swift on macos and check links"
 ```
 
 ---
@@ -1047,8 +1051,8 @@ Required sections, in this order:
 - **Stack** — Swift 6 via `swiftc`, CoreAudio, no SPM manifest, no Xcode project, no third-party dependencies.
 - **Constraints, as prohibitions** — copy the Global Constraints section of this plan verbatim. These are the lines an agent actually needs.
 - **Layout** — one line per directory saying what belongs there and what does not. State that `probes/` files are deliberately self-contained and their duplication must not be refactored away.
-- **Commands** — the typecheck loop from Task 6 Step 2, the build commands, and `reference/test-lockstep.sh`.
-- **A guardrail worth stating**, because it is tempting and was explicitly rejected in the design: do not add a CI job that points an agent at the specs to check they build. It is non-deterministic, costs real money per run, and would hard-code one agent into a repo whose premise is agent-agnosticism. The typecheck job gives most of the confidence with none of the contradiction.
+- **Commands** — the compile loop from Task 6 Step 2, the build commands, and `reference/test-lockstep.sh`.
+- **A guardrail worth stating**, because it is tempting and was explicitly rejected in the design: do not add a CI job that points an agent at the specs to check they build. It is non-deterministic, costs real money per run, and would hard-code one agent into a repo whose premise is agent-agnosticism. The compile job gives most of the confidence with none of the contradiction.
 - **Conventions** — Conventional Commits; the PR title is what release-please reads on squash-merge; `feat`/`fix`/`perf` bump the version, `docs`/`chore`/`probe` do not.
 - **The borrowed rule, stated prominently:** *the specs are the source of truth; changing an architectural choice requires adding a decision file in the same PR.* Note in one line that this makes the repo self-enforcing — the thing it teaches is the thing it requires.
 
@@ -1233,7 +1237,8 @@ Expected: `link check done` with no `BROKEN` lines.
 
 ```bash
 set -e
-for file in probes/*.swift reference/*.swift; do swiftc -typecheck -warnings-as-errors "$file"; done
+out="$(mktemp -d)"
+for file in probes/*.swift reference/*.swift; do swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"; done
 bash -n reference/test-lockstep.sh
 python3 -m json.tool release-please-config.json > /dev/null
 echo "ALL PASS"
@@ -1270,7 +1275,7 @@ The title carries `feat:` because this PR ships the phase specs. On squash-merge
 ## Done when
 
 - `./reference/test-lockstep.sh` passes every criterion on real hardware
-- Every Swift file typechecks with `-warnings-as-errors` and no output
+- Every Swift file compiles clean under `swiftc -warnings-as-errors` with no output
 - A reader can go from a fresh clone to a working pinned menu bar Shortcut using only `README.md` → `specs/phase-0` → `specs/phase-1`
 - `docs/decisions/` contains all six records, each with a `What we believed going in` section that is actually filled in
 - No file outside `AGENTS.md`'s pointer line names a specific agent
