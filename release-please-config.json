@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "changelog-sections": [
+        { "type": "feat",  "section": "Spec changes" },
+        { "type": "fix",   "section": "Corrections" },
+        { "type": "probe", "section": "New evidence" },
+        { "type": "docs",  "section": "Documentation" },
+        { "type": "chore", "hidden": true }
+      ]
+    }
+  }
+}

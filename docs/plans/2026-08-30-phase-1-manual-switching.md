@@ -42,7 +42,7 @@ So: **code and configuration appear in full** (Swift, YAML, JSON — these must 
 | `.release-please-manifest.json` | Version state |
 | `version.txt` | Version, maintained by release-please |
 | `.github/dependabot.yml` | GitHub Actions version updates only |
-| `.github/workflows/build.yml` | Typecheck all Swift on macos-latest |
+| `.github/workflows/build.yml` | Compile all Swift on macos-latest, warnings are errors |
 | `.github/workflows/links.yml` | Link rot check |
 | `.github/workflows/release-please.yml` | Release automation |
 | `.github/ISSUE_TEMPLATE/probe-report.yml` | Structured hardware evidence |
