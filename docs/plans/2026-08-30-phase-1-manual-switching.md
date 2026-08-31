@@ -562,7 +562,10 @@ for f in docs/decisions/*.md; do
   done
 done; echo "link check done"
 ```
-Expected: `link check done` with no `BROKEN` lines.
+Expected: `link check done`. **Forward references are expected here** — records
+link to `../method.md` (Task 7) and `../../specs/` (Task 4), which do not exist
+yet. Confirm every reported break is one of those, then re-verify at Task 9,
+Step 2, where nothing may be missing.
 
 - [ ] **Step 5: Commit**
 
