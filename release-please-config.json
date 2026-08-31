@@ -3,6 +3,8 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "initial-version": "0.1.0",
       "changelog-sections": [
         { "type": "feat",  "section": "Spec changes" },
         { "type": "fix",   "section": "Corrections" },
