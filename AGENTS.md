@@ -136,6 +136,11 @@ repository setting, not something a file in this repo can grant. It is worth
 knowing because the failure looks like a workflow bug and is not one, and
 because a fork will hit it on its first `feat:` merge.
 
+**Only that one toggle is needed.** Leave *Default workflow permissions* on
+**Read**: `release-please.yml` and `dependabot-auto-merge.yml` declare their own
+`permissions:` blocks, so raising the default grants needless write access to
+`build.yml` and `links.yml` and buys nothing.
+
 ## The rule that matters most
 
 **The specs are the source of truth. Changing an architectural choice requires
