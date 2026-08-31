@@ -1,0 +1,39 @@
+name: Spec is ambiguous
+description: A passage in a spec can be read two ways
+title: "spec: <file> — <what is unclear>"
+labels: ["spec-ambiguity"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ambiguity is the bug class for a spec repo. If your agent built
+        something different from what the spec intended, that is a defect in
+        the spec — please report it.
+  - type: dropdown
+    id: which
+    attributes:
+      label: Which spec
+      options:
+        - specs/phase-0-probe-your-hardware.md
+        - specs/phase-1-manual-switching.md
+    validations:
+      required: true
+  - type: textarea
+    id: passage
+    attributes:
+      label: The passage
+      description: Quote it
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: readings
+    attributes:
+      label: The two readings
+      description: What it could mean, and what you think it was meant to mean
+    validations:
+      required: true
+  - type: textarea
+    id: built
+    attributes:
+      label: What your agent actually built

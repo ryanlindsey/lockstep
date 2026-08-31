@@ -1,0 +1,8 @@
+.DS_Store
+.build/
+*.o
+
+# Compiled probe and reference binaries
+/lockstep
+/device-capabilities
+/does-macos-autoswitch

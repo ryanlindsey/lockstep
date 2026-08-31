@@ -10,6 +10,15 @@
 
 **Spec:** `docs/design/2026-08-30-repo-design.md`
 
+> **This is a historical artefact, preserved as executed.** A code review run
+> after execution found real bugs in the shipped Swift — a crash on `lockstep inf`,
+> a membership test that rejected valid rates on continuous-range devices, and a
+> probe that reported a failed read as a correction. Those are fixed in `probes/`
+> and `reference/`, and the code listings below have deliberately **not** been
+> updated to match: they record what was planned, not what shipped.
+>
+> **Where they differ, the repo is correct and this document is not.**
+
 **Plan location note:** The writing-plans default is `docs/superpowers/plans/`. This repo uses `docs/plans/` to match the `docs/design/` convention chosen for the spec — a public repo shouldn't leak tooling names into its structure.
 
 ## Global Constraints
@@ -17,12 +26,12 @@
 - **No third-party dependencies.** Foundation and CoreAudio only.
 - **No Xcode project, no SPM manifest.** `swiftc` compiles single files.
 - **No log scraping, no private APIs, no MediaRemote.** Public documented API only.
-- **Every Swift file must compile with `swiftc -typecheck -warnings-as-errors` and zero output.** This is enforced in CI and is how the known `CFString` raw-pointer warning is kept from returning.
+- **Every Swift file must compile clean under `swiftc -warnings-as-errors`, with zero output.** A *full compile*, not `-typecheck`. Verified: the `CFString` raw-pointer warning this rule exists to catch is emitted during lowering, so `-typecheck` exits 0 on code that carries it. Compiling is still not executing, so the never-execute rule below is unaffected.
 - **CI compiles Swift; CI never executes it.** A GitHub runner has no USB DAC, so probe or `lockstep` output there would be meaningless.
 - **The rate setter must read the rate back after setting it.** A `noErr` status is not proof the driver applied the change.
 - **Probes are self-contained single files.** Deliberate duplication of ~40 lines of CoreAudio helpers across the three Swift files is an accepted, documented trade — a reader can copy one file and run it. Do not factor them into a shared file.
 - **Conventional Commits.** The PR title is what release-please reads on squash-merge. `docs:` and `chore:` are changelog-only; `feat:` bumps the minor version. Shipping the phase specs is the `feat:`.
-- **The Swift in this plan is authoritative.** Do not copy CoreAudio call shapes from anywhere else. The throwaway code that established them read the device name into a `CFString` variable — an ARC hazard that warns. The `Unmanaged<CFString>` pattern in Task 2 is the fix, and `-warnings-as-errors` in CI is what keeps it fixed.
+- **The Swift in `probes/` and `reference/` is authoritative** — not the listings in this plan, which post-date it (see the note above). The listings were authoritative *at execution time*, and the `Unmanaged<CFString>` pattern they introduced is still the required one: reading a device name into a `CFString` variable is an ARC hazard, and `-warnings-as-errors` in CI is what keeps it fixed.
 - **Target:** macOS 12+ (`kAudioObjectPropertyElementMain`). Developed against macOS 26.6.2.
 
 ## A note on this plan's shape
@@ -42,7 +51,7 @@ So: **code and configuration appear in full** (Swift, YAML, JSON — these must 
 | `.release-please-manifest.json` | Version state |
 | `version.txt` | Version, maintained by release-please |
 | `.github/dependabot.yml` | GitHub Actions version updates only |
-| `.github/workflows/build.yml` | Typecheck all Swift on macos-latest |
+| `.github/workflows/build.yml` | Compile all Swift on macos-latest, warnings are errors |
 | `.github/workflows/links.yml` | Link rot check |
 | `.github/workflows/release-please.yml` | Release automation |
 | `.github/ISSUE_TEMPLATE/probe-report.yml` | Structured hardware evidence |
@@ -50,7 +59,7 @@ So: **code and configuration appear in full** (Swift, YAML, JSON — these must 
 | `probes/device-capabilities.swift` | Read-only: device name, current rate, supported rates |
 | `probes/does-macos-autoswitch.swift` | Forces a wrong rate, watches, restores |
 | `probes/README.md` | How to run them, and why they're duplicated |
-| `docs/decisions/0001..0006-*.md` | One decision each, with priors and evidence |
+| `docs/decisions/0001..0007-*.md` | One decision each, with priors and evidence |
 | `docs/decisions/README.md` | The narrated arc |
 | `docs/method.md` | The six-step loop, agent-neutral |
 | `specs/phase-0-probe-your-hardware.md` | Produces the reader's hardware profile |
@@ -289,7 +298,7 @@ print("supported: \(rates.isEmpty ? "none reported" : rates.map { String(format:
 - [ ] **Step 2: Verify it compiles with zero warnings**
 
 ```bash
-swiftc -typecheck -warnings-as-errors probes/device-capabilities.swift && echo "PASS"
+swiftc -warnings-as-errors -o /tmp/device-capabilities probes/device-capabilities.swift && echo "PASS"
 ```
 Expected: `PASS` with no other output. If the `CFString` warning appears, the `Unmanaged` pattern in `name(of:)` was not followed.
 
@@ -374,6 +383,16 @@ func forceRate(_ target: Double, on device: AudioDeviceID) -> Bool {
     return status == noErr
 }
 
+// Poll until the device reports `target`, or give up. A noErr status is not
+// proof the driver applied the change — the same rule lockstep itself follows.
+func settles(at target: Double, on device: AudioDeviceID) -> Bool {
+    for _ in 0..<20 {
+        usleep(50_000)
+        if currentRate(of: device) == target { return true }
+    }
+    return false
+}
+
 guard let device = defaultOutputDevice(), let original = currentRate(of: device) else {
     FileHandle.standardError.write(Data("no default output device\n".utf8))
     exit(1)
@@ -393,6 +412,18 @@ print("original rate: \(Int(original)) Hz")
 print("forcing:       \(Int(wrong)) Hz  (deliberately wrong)")
 guard forceRate(wrong, on: device) else {
     FileHandle.standardError.write(Data("could not set the rate; aborting\n".utf8))
+    exit(1)
+}
+
+// Confirm the device actually arrived before treating any later change as a
+// correction. Without this, a device that advertises a rate it cannot hold
+// looks identical to macOS auto-switching — and would tell you, wrongly, that
+// you do not need lockstep.
+guard settles(at: wrong, on: device) else {
+    forceRate(original, on: device)
+    print("")
+    print("INCONCLUSIVE: the device advertises \(Int(wrong)) Hz but would not hold it.")
+    print("Nothing can be concluded about auto-switching. Restored \(Int(original)) Hz.")
     exit(1)
 }
 
@@ -416,7 +447,7 @@ print(corrected
 - [ ] **Step 5: Verify it compiles with zero warnings**
 
 ```bash
-swiftc -typecheck -warnings-as-errors probes/does-macos-autoswitch.swift && echo "PASS"
+swiftc -warnings-as-errors -o /tmp/does-macos-autoswitch probes/does-macos-autoswitch.swift && echo "PASS"
 ```
 Expected: `PASS` with no other output.
 
@@ -450,7 +481,7 @@ git commit -m "probe: add device-capabilities and does-macos-autoswitch"
 ### Task 3: The decision log
 
 **Files:**
-- Create: `docs/decisions/README.md`, `docs/decisions/0001-detect-via-scriptingbridge.md`, `docs/decisions/0002-match-rate-only.md`, `docs/decisions/0003-jxa-cannot-reach-coreaudio.md`, `docs/decisions/0004-macos-does-not-autoswitch.md`, `docs/decisions/0005-scripts-not-an-app.md`, `docs/decisions/0006-build-rather-than-adopt.md`
+- Create: `docs/decisions/README.md`, `docs/decisions/0001-detect-via-scriptingbridge.md`, `docs/decisions/0002-match-rate-only.md`, `docs/decisions/0003-jxa-cannot-reach-coreaudio.md`, `docs/decisions/0004-macos-does-not-autoswitch.md`, `docs/decisions/0005-scripts-not-an-app.md`, `docs/decisions/0006-build-rather-than-adopt.md`, `docs/decisions/0007-ci-compiles-not-typechecks.md`
 
 **Interfaces:**
 - Consumes: probe output formats from Task 2 (0004 quotes `does-macos-autoswitch` output)
@@ -515,12 +546,19 @@ git commit -m "probe: add device-capabilities and does-macos-autoswitch"
 - Explicitly do **not** write it on code-quality grounds, and do not name shortcomings of the other project. It is more useful to a reader as a transferable distinction, and a public repo that opens by criticising another developer's freely-given work invites an argument this project has no interest in having.
 - Consequences: be honest that hardware-level problems — DAC relock clicks, devices misreporting supported rates, dropouts on format change — are inherent to changing sample rates on real USB hardware and are inherited by *any* implementation, including this one. Adopting a different detector does not avoid them.
 
+**0007 — CI compiles rather than typechecks.** *Decided by: agent-proposed → human-accepted.*
+- Believed going in: `swiftc -typecheck -warnings-as-errors` would catch the `CFString` raw-pointer warning. This was written into the approved plan as an explicit guarantee, and it survived a self-review pass before being merged.
+- Probed, during execution rather than design: the same naive `CFString` read was compiled both ways. Under `-typecheck` it emitted no warning and exited 0. Under a full compile it emitted `warning: forming 'UnsafeMutableRawPointer' to a variable of type 'CFString'` and, with `-warnings-as-errors`, exited non-zero. Quote both results.
+- Decision: `build.yml` performs a full compile into a temporary directory. Never `-typecheck`. Compiling is still not executing, so the never-execute rule is unaffected.
+- Consequences: CI is slightly slower, and in exchange the guarantee is real. **State the trap plainly:** reverting to `-typecheck` looks like a harmless speed-up, keeps the build green, and silently removes the only protection against the regression it was written to prevent.
+- Worth noting in the narrated README: this is the only record whose wrong prior came from an approved, merged plan rather than from early design. The loop caught the plan, not just the idea.
+
 - [ ] **Step 3: Write `docs/decisions/README.md`**
 
 Required content:
 - A one-paragraph explanation of the two non-standard ADR fields and why they exist: `What we believed going in` (standard ADRs record the conclusion and launder away the author's wrong prior, which is the part that teaches judgment) and `Decided by` (the human/agent mix is the honest texture of this kind of work).
 - **The narrated arc**, in order, as prose rather than a list: the project began as a native menubar app; a probe disproved the agent's confident assumption about detection (0001); a YAGNI call on bit depth (0002) later turned out to be the only thing that made another route evaluable (0003); a premise check nearly ended the project (0004); and the app collapsed into roughly a hundred lines of script (0005).
-- A table of all six with links.
+- A table of all seven with links.
 - Done when: a reader who reads only this file understands both what was decided and where the reasoning went wrong, and can find any individual record.
 
 - [ ] **Step 4: Check every link resolves**
@@ -533,7 +571,10 @@ for f in docs/decisions/*.md; do
   done
 done; echo "link check done"
 ```
-Expected: `link check done` with no `BROKEN` lines.
+Expected: `link check done`. **Forward references are expected here** — records
+link to `../method.md` (Task 7) and `../../specs/` (Task 4), which do not exist
+yet. Confirm every reported break is one of those, then re-verify at Task 9,
+Step 2, where nothing may be missing.
 
 - [ ] **Step 5: Commit**
 
@@ -618,7 +659,7 @@ Note: `feat:` here is deliberate and is the only `feat:` in this plan. It is wha
 
 **Interfaces:**
 - Consumes: the CLI contract and acceptance criteria from `specs/phase-1-manual-switching.md` (Task 4); the CoreAudio helper shapes from Task 2
-- Produces: a `lockstep` binary that `.github/workflows/build.yml` (Task 6) typechecks and `README.md` (Task 9) links to
+- Produces: a `lockstep` binary that `.github/workflows/build.yml` (Task 6) compiles and `README.md` (Task 9) links to
 
 - [ ] **Step 1: Write `reference/lockstep.swift`**
 
@@ -780,7 +821,7 @@ case .failed(let reason):
 - [ ] **Step 2: Verify it compiles with zero warnings**
 
 ```bash
-swiftc -typecheck -warnings-as-errors reference/lockstep.swift && echo "PASS"
+swiftc -warnings-as-errors -o /tmp/lockstep reference/lockstep.swift && echo "PASS"
 ```
 Expected: `PASS` with no other output.
 
@@ -924,19 +965,22 @@ on:
   pull_request:
 
 jobs:
-  typecheck:
+  compile:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       # Compile only. Never execute: a GitHub runner has no USB DAC, so any
       # probe or lockstep output here would be meaningless.
-      - name: Typecheck every Swift file, warnings are errors
+      # A full compile, not -typecheck. The CFString raw-pointer warning this
+      # job exists to catch is emitted during lowering, so -typecheck misses it.
+      - name: Compile every Swift file, warnings are errors
         run: |
           set -e
+          out="$(mktemp -d)"
           for file in probes/*.swift reference/*.swift; do
             echo "==> $file"
-            swiftc -typecheck -warnings-as-errors "$file"
+            swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"
           done
 
       - name: Shell scripts parse
@@ -946,8 +990,9 @@ jobs:
 - [ ] **Step 2: Reproduce the CI check locally before pushing**
 
 ```bash
-set -e; for file in probes/*.swift reference/*.swift; do
-  echo "==> $file"; swiftc -typecheck -warnings-as-errors "$file"; done
+set -e; out="$(mktemp -d)"
+for file in probes/*.swift reference/*.swift; do
+  echo "==> $file"; swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"; done
 bash -n reference/test-lockstep.sh && echo "PASS"
 ```
 Expected: each filename echoed, no warnings, `PASS`.
@@ -979,7 +1024,7 @@ jobs:
 
 ```bash
 git add .github/workflows/
-git commit -m "ci: typecheck swift on macos and check links"
+git commit -m "ci: compile swift on macos and check links"
 ```
 
 ---
@@ -1047,8 +1092,8 @@ Required sections, in this order:
 - **Stack** — Swift 6 via `swiftc`, CoreAudio, no SPM manifest, no Xcode project, no third-party dependencies.
 - **Constraints, as prohibitions** — copy the Global Constraints section of this plan verbatim. These are the lines an agent actually needs.
 - **Layout** — one line per directory saying what belongs there and what does not. State that `probes/` files are deliberately self-contained and their duplication must not be refactored away.
-- **Commands** — the typecheck loop from Task 6 Step 2, the build commands, and `reference/test-lockstep.sh`.
-- **A guardrail worth stating**, because it is tempting and was explicitly rejected in the design: do not add a CI job that points an agent at the specs to check they build. It is non-deterministic, costs real money per run, and would hard-code one agent into a repo whose premise is agent-agnosticism. The typecheck job gives most of the confidence with none of the contradiction.
+- **Commands** — the compile loop from Task 6 Step 2, the build commands, and `reference/test-lockstep.sh`.
+- **A guardrail worth stating**, because it is tempting and was explicitly rejected in the design: do not add a CI job that points an agent at the specs to check they build. It is non-deterministic, costs real money per run, and would hard-code one agent into a repo whose premise is agent-agnosticism. The compile job gives most of the confidence with none of the contradiction.
 - **Conventions** — Conventional Commits; the PR title is what release-please reads on squash-merge; `feat`/`fix`/`perf` bump the version, `docs`/`chore`/`probe` do not.
 - **The borrowed rule, stated prominently:** *the specs are the source of truth; changing an architectural choice requires adding a decision file in the same PR.* Note in one line that this makes the repo self-enforcing — the thing it teaches is the thing it requires.
 
@@ -1233,7 +1278,8 @@ Expected: `link check done` with no `BROKEN` lines.
 
 ```bash
 set -e
-for file in probes/*.swift reference/*.swift; do swiftc -typecheck -warnings-as-errors "$file"; done
+out="$(mktemp -d)"
+for file in probes/*.swift reference/*.swift; do swiftc -warnings-as-errors -o "$out/$(basename "$file" .swift)" "$file"; done
 bash -n reference/test-lockstep.sh
 python3 -m json.tool release-please-config.json > /dev/null
 echo "ALL PASS"
@@ -1270,7 +1316,7 @@ The title carries `feat:` because this PR ships the phase specs. On squash-merge
 ## Done when
 
 - `./reference/test-lockstep.sh` passes every criterion on real hardware
-- Every Swift file typechecks with `-warnings-as-errors` and no output
+- Every Swift file compiles clean under `swiftc -warnings-as-errors` with no output
 - A reader can go from a fresh clone to a working pinned menu bar Shortcut using only `README.md` → `specs/phase-0` → `specs/phase-1`
-- `docs/decisions/` contains all six records, each with a `What we believed going in` section that is actually filled in
+- `docs/decisions/` contains all seven records, each with a `What we believed going in` section that is actually filled in
 - No file outside `AGENTS.md`'s pointer line names a specific agent
