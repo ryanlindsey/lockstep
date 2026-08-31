@@ -49,7 +49,7 @@ there, uncorrected, for the full eight seconds.
 | [`specs/`](specs/) | The phase specs. The thing you build from |
 | [`probes/`](probes/) | Runnable programs, each answering one question about your hardware |
 | [`docs/method.md`](docs/method.md) | The loop, agent-neutral |
-| [`docs/decisions/`](docs/decisions/) | Seven decision records, priors and dead ends intact |
+| [`docs/decisions/`](docs/decisions/) | Eight decision records, priors and dead ends intact |
 | [`docs/design/`](docs/design/) · [`docs/plans/`](docs/plans/) | How this repo itself was designed and built |
 | [`reference/`](reference/) | What the specs produced. You do not need it |
 | [`AGENTS.md`](AGENTS.md) | The machine-readable contract |

@@ -92,6 +92,55 @@ skipped: no version bump, no changelog entry.
 | `docs` | Documentation — changelog only |
 | `chore` | Hidden |
 
+### Versioning
+
+Versions stay in **0.x** until the specs are stable enough that a stranger
+building from them is unlikely to hit a correction. `bump-minor-pre-major` is
+set, so `feat:` bumps the minor (`0.1.0` → `0.2.0`) rather than jumping to
+`1.0.0`. Reaching 1.0.0 is a deliberate act, not something the first merge does
+by default.
+
+### Dependabot
+
+Patch and minor updates auto-merge once `compile` and `lychee` pass.
+**Majors do not** — they wait for a human, and the workflow leaves a notice
+saying so.
+
+The reason is coverage: CI here proves Swift compiles and links resolve. It
+exercises neither release-please nor the actions themselves, so a behavioural
+change in a major bump would land green and surface later. That is the same
+lesson as [0008](docs/decisions/0008-acceptance-criteria-are-not-coverage.md) —
+a green check answers the question it was written to ask, and no other.
+
+`main` requires both checks and is strict, which is what makes "merge on CI
+success" a real gate rather than a label: without required checks, GitHub's
+auto-merge has nothing to wait for and merges immediately.
+
+### Repo setup release-please depends on
+
+release-please computes the release, pushes a `release-please--branches--main`
+branch, and then opens a pull request. That last step needs **Settings → Actions
+→ General → Workflow permissions → "Allow GitHub Actions to create and approve
+pull requests"** enabled.
+
+Without it the job fails *after* doing all the real work, with:
+
+```
+✔ Successfully updated reference release-please--branches--main
+##[error]release-please failed: GitHub Actions is not permitted to create or
+approve pull requests.
+```
+
+The workflow's own `permissions:` block is already correct — this is a
+repository setting, not something a file in this repo can grant. It is worth
+knowing because the failure looks like a workflow bug and is not one, and
+because a fork will hit it on its first `feat:` merge.
+
+**Only that one toggle is needed.** Leave *Default workflow permissions* on
+**Read**: `release-please.yml` and `dependabot-auto-merge.yml` declare their own
+`permissions:` blocks, so raising the default grants needless write access to
+`build.yml` and `links.yml` and buys nothing.
+
 ## The rule that matters most
 
 **The specs are the source of truth. Changing an architectural choice requires

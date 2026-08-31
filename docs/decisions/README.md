@@ -1,6 +1,6 @@
 # Decision log
 
-Seven records, one decision each, in a standard ADR shape with two extra fields.
+Eight records, one decision each, in a standard ADR shape with two extra fields.
 
 **`What we believed going in`.** A conventional ADR records the context and the
 conclusion, and quietly launders away what the author believed before the
@@ -47,13 +47,20 @@ had checked how hard the central operation was. It was one CoreAudio call.
 Shortcuts already pin to the menu bar. The application collapsed into scripts
 ([0005]), and the architecture became acceptance criteria instead.
 
-The last two records concern what the project deliberately did not do. It chose
+Two records concern what the project deliberately did not do. It chose
 to build rather than adopt existing tools, on architectural grounds that are
 stated and checkable ([0006]). And after the plan had been reviewed, merged and
 started, execution discovered that its central CI guarantee did not work at all
 — `-typecheck` cannot see the warning it was written to catch ([0007]). That one
-is the strongest evidence here that the loop is worth running, because what the
-loop caught was the plan.
+looked like the strongest evidence here that the loop is worth running, because
+what the loop caught was the plan.
+
+Then phase 1 shipped, and a review found the code crashed on `lockstep inf`
+([0008]) — after nine passing acceptance criteria, a clean warnings-as-errors
+build, and green CI. Three records now describe one shape: the plan was wrong,
+the probe was wrong, the code was wrong. The third is the uncomfortable one,
+because it passed every check the first two exist to describe. Verification asks
+whether the thing does what you said; review asks what you failed to say.
 
 ## The records
 
@@ -66,6 +73,7 @@ loop caught was the plan.
 | [0005](0005-scripts-not-an-app.md) | Ship scripts and Shortcuts, not an app | agent-proposed → human-accepted |
 | [0006](0006-build-rather-than-adopt.md) | Build rather than adopt prior art | human-overrode-agent |
 | [0007](0007-ci-compiles-not-typechecks.md) | CI compiles rather than typechecks | agent-proposed → human-accepted |
+| [0008](0008-acceptance-criteria-are-not-coverage.md) | Acceptance criteria are not coverage | agent-proposed → human-accepted |
 
 [0001]: 0001-detect-via-scriptingbridge.md
 [0002]: 0002-match-rate-only.md
@@ -74,3 +82,4 @@ loop caught was the plan.
 [0005]: 0005-scripts-not-an-app.md
 [0006]: 0006-build-rather-than-adopt.md
 [0007]: 0007-ci-compiles-not-typechecks.md
+[0008]: 0008-acceptance-criteria-are-not-coverage.md
