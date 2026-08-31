@@ -1,0 +1,48 @@
+name: Probe report
+description: Report what the probes found on your hardware
+title: "probe: <device> on macOS <version>"
+labels: ["probe-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Run both probes in `probes/` first. This builds a compatibility record
+        from evidence rather than anecdote — thank you.
+  - type: input
+    id: device
+    attributes:
+      label: Output device
+      description: Exactly as device-capabilities reports it
+      placeholder: CA DacMagic 200M 2.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "26.6.2"
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: device-capabilities output
+      description: Paste all three lines
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: autoswitch
+    attributes:
+      label: Did anything correct the rate automatically?
+      options:
+        - "No — the forced rate held for the full 8 seconds"
+        - "Yes — something corrected it"
+        - "INCONCLUSIVE — the device would not hold the forced rate"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else worth recording
+      description: Clicks, dropouts, rates the device claims but will not accept
