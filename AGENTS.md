@@ -92,6 +92,30 @@ skipped: no version bump, no changelog entry.
 | `docs` | Documentation — changelog only |
 | `chore` | Hidden |
 
+### Versioning
+
+Versions stay in **0.x** until the specs are stable enough that a stranger
+building from them is unlikely to hit a correction. `bump-minor-pre-major` is
+set, so `feat:` bumps the minor (`0.1.0` → `0.2.0`) rather than jumping to
+`1.0.0`. Reaching 1.0.0 is a deliberate act, not something the first merge does
+by default.
+
+### Dependabot
+
+Patch and minor updates auto-merge once `compile` and `lychee` pass.
+**Majors do not** — they wait for a human, and the workflow leaves a notice
+saying so.
+
+The reason is coverage: CI here proves Swift compiles and links resolve. It
+exercises neither release-please nor the actions themselves, so a behavioural
+change in a major bump would land green and surface later. That is the same
+lesson as [0008](docs/decisions/0008-acceptance-criteria-are-not-coverage.md) —
+a green check answers the question it was written to ask, and no other.
+
+`main` requires both checks and is strict, which is what makes "merge on CI
+success" a real gate rather than a label: without required checks, GitHub's
+auto-merge has nothing to wait for and merges immediately.
+
 ### Repo setup release-please depends on
 
 release-please computes the release, pushes a `release-please--branches--main`
