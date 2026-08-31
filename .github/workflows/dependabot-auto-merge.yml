@@ -1,0 +1,39 @@
+name: dependabot-auto-merge
+
+# pull_request_target runs with repository write permissions. That is required
+# to enable auto-merge, and it is safe here only because this workflow never
+# checks out or executes the pull request's code — it calls the GitHub API and
+# nothing else. Do not add a checkout step.
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+
+      # Patch and minor merge themselves once the required checks pass. Majors
+      # wait for a human, because CI here proves only that Swift compiles and
+      # links resolve — it exercises neither release-please nor the actions
+      # themselves, so a behavioural change in a major bump would land green
+      # and surface later.
+      - name: Enable auto-merge for patch and minor updates
+        if: |
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Note when a major update needs review
+        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+        run: |
+          echo "::notice::Major bump (${{ steps.meta.outputs.dependency-names }}) — not auto-merged. Review and merge manually."
