@@ -92,6 +92,26 @@ skipped: no version bump, no changelog entry.
 | `docs` | Documentation — changelog only |
 | `chore` | Hidden |
 
+### Repo setup release-please depends on
+
+release-please computes the release, pushes a `release-please--branches--main`
+branch, and then opens a pull request. That last step needs **Settings → Actions
+→ General → Workflow permissions → "Allow GitHub Actions to create and approve
+pull requests"** enabled.
+
+Without it the job fails *after* doing all the real work, with:
+
+```
+✔ Successfully updated reference release-please--branches--main
+##[error]release-please failed: GitHub Actions is not permitted to create or
+approve pull requests.
+```
+
+The workflow's own `permissions:` block is already correct — this is a
+repository setting, not something a file in this repo can grant. It is worth
+knowing because the failure looks like a workflow bug and is not one, and
+because a fork will hit it on its first `feat:` merge.
+
 ## The rule that matters most
 
 **The specs are the source of truth. Changing an architectural choice requires
