@@ -60,6 +60,11 @@ func supportedRates(of device: AudioDeviceID) -> [Double] {
         .sorted()
 }
 
+// Rates are formatted with %.0f rather than Int(), because Int() traps on a
+// non-finite Double. Nothing here should ever produce one — these values come
+// from the device's own rate list — but lockstep.swift shipped a crash built on
+// exactly that assumption, so the rule is applied everywhere rather than where
+// it currently seems necessary.
 @discardableResult
 func forceRate(_ target: Double, on device: AudioDeviceID) -> Bool {
     var addr = address(kAudioDevicePropertyNominalSampleRate)
@@ -85,11 +90,11 @@ func settles(at target: Double, on device: AudioDeviceID) -> Bool {
 func restore(_ original: Double, on device: AudioDeviceID) {
     forceRate(original, on: device)
     if settles(at: original, on: device) {
-        print("restored to \(Int(original)) Hz")
+        print("restored to \(String(format: "%.0f", original)) Hz")
     } else {
         let observed = currentRate(of: device).map { String(format: "%.0f", $0) } ?? "unknown"
         FileHandle.standardError.write(Data(
-            "WARNING: could not restore \(Int(original)) Hz — device reports \(observed) Hz.\n"
+            "WARNING: could not restore \(String(format: "%.0f", original)) Hz — device reports \(observed) Hz.\n"
                 .utf8))
     }
 }
@@ -109,8 +114,8 @@ guard let lowest = rates.first, let highest = rates.last, lowest != highest else
 }
 let wrong = (original == highest) ? lowest : highest
 
-print("original rate: \(Int(original)) Hz")
-print("forcing:       \(Int(wrong)) Hz  (deliberately wrong)")
+print("original rate: \(String(format: "%.0f", original)) Hz")
+print("forcing:       \(String(format: "%.0f", wrong)) Hz  (deliberately wrong)")
 guard forceRate(wrong, on: device) else {
     FileHandle.standardError.write(Data("could not set the rate; aborting\n".utf8))
     exit(1)
@@ -123,7 +128,7 @@ guard forceRate(wrong, on: device) else {
 guard settles(at: wrong, on: device) else {
     restore(original, on: device)
     print("")
-    print("INCONCLUSIVE: the device advertises \(Int(wrong)) Hz but would not hold it.")
+    print("INCONCLUSIVE: the device advertises \(String(format: "%.0f", wrong)) Hz but would not hold it.")
     print("Nothing can be concluded about auto-switching.")
     exit(1)
 }
