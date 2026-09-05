@@ -5,8 +5,9 @@ sample rate to match what is playing. A 44.1 kHz track sent to a DAC sitting at
 96 kHz gets resampled, and correcting it means a trip through Audio MIDI Setup
 every time the material changes.
 
-lockstep is about 150 lines of Swift and a few pinned Shortcuts that make the
-device follow the source instead.
+lockstep is under 400 lines of Swift, a few pinned Shortcuts, and a launchd
+agent that makes the device follow the source instead — automatically while
+Apple Music is playing, and by one click in the menu bar for everything else.
 
 ## What this repo actually is
 
@@ -30,6 +31,9 @@ specs produce working code, not to be installed.
    the author's, and what it reports changes what you should build.
 3. Build from [`specs/phase-1-manual-switching.md`](specs/phase-1-manual-switching.md)
    with whatever agent you use.
+4. Build from [`specs/phase-2-automatic-switching.md`](specs/phase-2-automatic-switching.md)
+   once phase 1 works. It is a mode added to the phase 1 binary plus a launchd
+   agent, so it needs phase 1 finished rather than merely read.
 
 ### Before you invest any time in this
 
@@ -47,9 +51,9 @@ there, uncorrected, for the full eight seconds.
 | Path | What it is |
 |---|---|
 | [`specs/`](specs/) | The phase specs. The thing you build from |
-| [`probes/`](probes/) | Runnable programs, each answering one question about your hardware |
+| [`probes/`](probes/) | Four runnable programs, each answering one question about your hardware or your macOS |
 | [`docs/method.md`](docs/method.md) | The loop, agent-neutral |
-| [`docs/decisions/`](docs/decisions/) | Eight decision records, priors and dead ends intact |
+| [`docs/decisions/`](docs/decisions/) | Thirteen decision records, priors and dead ends intact |
 | [`docs/design/`](docs/design/) · [`docs/plans/`](docs/plans/) | How this repo itself was designed and built |
 | [`reference/`](reference/) | What the specs produced. You do not need it |
 | [`AGENTS.md`](AGENTS.md) | The machine-readable contract |
@@ -85,7 +89,7 @@ to it — never content of its own.
 |---|---|
 | **0** — probe your hardware | Complete |
 | **1** — manual switching from the menu bar | Complete |
-| **2** — automatic switching | Not yet written |
+| **2** — automatic switching | Complete |
 
 ## Contributing
 

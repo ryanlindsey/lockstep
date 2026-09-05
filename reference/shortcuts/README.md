@@ -41,6 +41,12 @@ The Shortcuts appear under the Shortcuts icon in the menu bar, not as their own
 icon, so there is no always-visible indicator of the current rate. Shortcuts can
 trigger but not display.
 
-Phase 2 removes the need to look: switching becomes automatic, and these
-Shortcuts stay as the manual override for when it is wrong or when you are
-playing something Music does not know about.
+[Phase 2](../../specs/phase-2-automatic-switching.md) removes the need to look:
+a launchd agent follows Apple Music and sets the rate for you
+([`../launchd/README.md`](../launchd/README.md)).
+
+The Shortcuts do not become redundant when it is installed. Phase 2 follows
+Apple Music and nothing else, so a browser playing a 48 kHz video gets whatever
+rate Music last set. These buttons are the override for that, and for the times
+the automatic choice is wrong. That is a permanent limitation of watching one
+source, not a gap waiting to be closed.

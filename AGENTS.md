@@ -16,15 +16,19 @@ prove the specs produce working code, not to be installed.
 
 ## Stack
 
-Swift 6 compiled with `swiftc`. CoreAudio and Foundation. macOS Shortcuts for
-the menu bar. No SPM manifest, no Xcode project, no third-party dependencies.
+Swift 6 compiled with `swiftc`. CoreAudio, Foundation and ScriptingBridge.
+macOS Shortcuts for the menu bar; a launchd agent keeps `--watch` running. No
+SPM manifest, no Xcode project, no third-party dependencies.
 Target macOS 12+ (`kAudioObjectPropertyElementMain`); developed against 26.6.2.
 
 ## Constraints
 
 Prohibitions, because that is what is actually useful:
 
-- **No third-party dependencies.** Foundation and CoreAudio only.
+- **No third-party dependencies.** System frameworks only — Foundation,
+  CoreAudio and ScriptingBridge. The prohibition is on third-party code, not on
+  Apple's: ScriptingBridge ships with macOS. Phase 1's wording was "Foundation
+  and CoreAudio only" and phase 2 widened it.
 - **No Xcode project, no SPM manifest.** `swiftc` compiles single files.
 - **No log scraping, no private APIs, no MediaRemote.** Public documented API
   only.
@@ -37,10 +41,13 @@ Prohibitions, because that is what is actually useful:
   probe or `lockstep` output there would be meaningless.
 - **The rate setter must read the rate back after setting it.** A `noErr` status
   is not proof the driver applied the change.
+- **Never launch Music to ask it a question.** Check `isRunning` first. An audio
+  utility that opens Music because it was curious is a bug, and a launchd agent
+  that does it at login is a worse one.
 - **Probes are self-contained single files.** The ~40 duplicated lines of
-  CoreAudio helpers across the three Swift files are a deliberate, documented
-  trade so a reader can copy one file and run it. **Do not factor them into a
-  shared module.**
+  CoreAudio helpers across the CoreAudio-touching Swift files are a deliberate,
+  documented trade so a reader can copy one file and run it. **Do not factor
+  them into a shared module.**
 - **Do not switch bit depth.** See
   [0002](docs/decisions/0002-match-rate-only.md).
 - **A guardrail, because it is tempting and was explicitly rejected:** do not add
@@ -73,9 +80,18 @@ done
 swiftc -O reference/lockstep.swift -o /tmp/lockstep
 ./reference/test-lockstep.sh /tmp/lockstep
 
+# Build and exercise --watch (real hardware, audible, and it drives Music).
+# Play from a large playlist: it skips about nine tracks.
+swiftc -O reference/lockstep.swift -o /tmp/lockstep
+./reference/test-lockstep-watch.sh /tmp/lockstep
+
 # The probes (the second one changes a system setting and is audible)
 swiftc -O probes/device-capabilities.swift -o /tmp/device-capabilities && /tmp/device-capabilities
 swiftc -O probes/does-macos-autoswitch.swift -o /tmp/does-macos-autoswitch && /tmp/does-macos-autoswitch
+
+# The phase 2 probes (both read-only; both need Music playing)
+swiftc -O probes/does-music-notify.swift -o /tmp/does-music-notify && /tmp/does-music-notify
+swiftc -O probes/can-swift-read-music-rate.swift -o /tmp/can-swift-read-music-rate && /tmp/can-swift-read-music-rate
 ```
 
 ## Conventions
