@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>me.ryanlindsey.lockstep</string>
+
+  <!-- launchd does not expand ~ or $HOME. Replace YOUR-USERNAME in all three
+       paths below with the output of `id -un`, and replace the device name
+       with one your own hardware reported in phase 0. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOUR-USERNAME/bin/lockstep</string>
+    <string>--watch</string>
+    <string>--devices</string>
+    <string>CA DacMagic 200M 2.0</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Restart if it exits for any reason. launchd throttles respawns to one
+       every ten seconds, which is what keeps a misconfigured agent — a wrong
+       binary path, an empty allowlist — from spinning. -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR-USERNAME/Library/Logs/lockstep.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR-USERNAME/Library/Logs/lockstep.log</string>
+</dict>
+</plist>

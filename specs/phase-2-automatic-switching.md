@@ -96,21 +96,45 @@ the log — including the events a test is sitting there waiting to read.
 
 ### The rules
 
-**400 ms debounce, superseded rather than queued.** Five rapid skips fire five
-notifications and must produce exactly one evaluation, and that evaluation reads
-the track that is playing by the time it runs, not the one that triggered it.
-Each notification cancels the pending evaluation and schedules a new one.
+**400 ms debounce, superseded rather than queued.** Each notification cancels the
+pending evaluation and schedules a new one, so a run of notifications collapses,
+and the evaluation that finally runs reads the track playing at that moment
+rather than the one that triggered it.
 
 The debounce is not a nicety. Music emits a *pair* of notifications for a pause
 and another pair for a play — one carrying the old state and one the new. One
 keypress without a debounce is two evaluations.
 
+**It does not collapse a burst to exactly one evaluation, and it is not supposed
+to.** Music's `playerInfo` emissions trail the skips that caused them by about
+500 ms — wider than the window — so five rapid skips typically produce two
+evaluations. Widening the debounce to cover the trail would delay *every* track
+change by that much, which is the defect lockstep exists to remove. The thing
+that must be exactly one is the **rate change**, and the no-op guard below is
+what guarantees it. See
+[decision 0013](../docs/decisions/0013-the-debounce-criterion-counts-rate-changes.md).
+
 **Play-state gate.** Act only when Music reports playing. Paused, stopped, and
 not running are all skips with a reason.
+
+**Order matters, and the order is:** is Music playing → is this device
+allowlisted → what rate is the track → does the device need changing. Deciding
+the device before the rate keeps the skip reason independent of timing; ask
+about the rate first and a device outside the allowlist gets reported as
+"Music reports no sample rate" whenever an evaluation lands mid-track-change.
 
 **Device allowlist.** Re-read the default output device on every evaluation; it
 changes underneath a long-running agent, which is the entire reason the
 allowlist exists. A device not in the list is skipped, and the log names it.
+
+Match names with surrounding whitespace trimmed on **both** sides, and log the
+name exactly as the driver reports it. Drivers pad their names: the reference
+DAC calls itself `CA DacMagic 200M 2.0 `, with a trailing space, and an exact
+match against a name a reader copied by eye fails forever while printing a
+log line that looks correct. See
+[decision 0012](../docs/decisions/0012-device-names-are-matched-trimmed.md).
+Trimming is not case folding and not substring matching — a different name is
+still a different device.
 
 **No-op guard.** If the device already reports the target rate, issue no set
 call at all. This is a correctness rule, not an optimisation: a set call is an
@@ -158,8 +182,9 @@ Two rules bite, and both bite silently:
 
 ## Acceptance criteria
 
-- [ ] Skipping five tracks in rapid succession produces exactly one evaluation —
-      one `set` or one `noop` line, not five
+- [ ] Skipping five tracks in rapid succession produces at most one `set` line —
+      one rate change when the rate needs changing, zero when it does not, never
+      five — and fewer than five evaluations
 - [ ] With Music paused, no `set` line appears regardless of track state
 - [ ] With the default output set to a device not in the allowlist, no `set`
       line appears and a `skip` line names the device
@@ -200,6 +225,12 @@ this code and never executes it.
 The no-op criterion depends on two consecutive tracks sharing a sample rate,
 which the test cannot arrange. When they differ it reports `SKIP` rather than
 passing silently. **A `SKIP` means that criterion is unverified, not satisfied.**
+
+**Play from a large playlist, not a single album.** The test skips about nine
+tracks. Run it against one album and Music reaches the end of the queue part way
+through and stops, after which every remaining criterion fails for reasons that
+have nothing to do with lockstep. The test checks the queue depth before it
+starts and refuses rather than producing that result.
 
 ## Known limitations
 
