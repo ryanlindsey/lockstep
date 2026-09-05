@@ -1,6 +1,6 @@
 # Decision log
 
-Eight records, one decision each, in a standard ADR shape with two extra fields.
+Eleven records, one decision each, in a standard ADR shape with two extra fields.
 
 **`What we believed going in`.** A conventional ADR records the context and the
 conclusion, and quietly launders away what the author believed before the
@@ -62,6 +62,25 @@ the probe was wrong, the code was wrong. The third is the uncomfortable one,
 because it passed every check the first two exist to describe. Verification asks
 whether the thing does what you said; review asks what you failed to say.
 
+Phase 2 opened differently. It began by closing the two questions phase 1's
+design had left open — does `com.apple.Music.playerInfo` actually fire, and can
+a *compiled* binary read Music's rate or was that only ever true of `osascript`
+— and it closed both with probes before any switching logic existed to be
+designed around the answers ([0010]). Both came back as expected, which is the
+point: the loop ran ahead of the mistake instead of catching one, and the cost
+of finding out was two files and about two minutes. The design had already
+specified a polling fallback in case the notification proved unreliable; because
+the question got asked, that fallback is not in the codebase.
+
+The other two records of this phase are arguments rather than probes, and they
+run in opposite directions. [0009] refuses a config file for the device
+allowlist, on the grounds that the launchd plist is a configuration surface the
+reader already has to edit. [0011] is the first record here written against the
+design document itself: §8's fallback rule said to climb to an integer multiple,
+which silently strands a 96 kHz source on a 44.1/48-only device, so the
+implementation divides as well as multiplies. A specification is the source of
+truth about what was decided, not a guarantee that the decision was right.
+
 ## The records
 
 | # | Decision | Decided by |
@@ -74,6 +93,9 @@ whether the thing does what you said; review asks what you failed to say.
 | [0006](0006-build-rather-than-adopt.md) | Build rather than adopt prior art | human-overrode-agent |
 | [0007](0007-ci-compiles-not-typechecks.md) | CI compiles rather than typechecks | agent-proposed → human-accepted |
 | [0008](0008-acceptance-criteria-are-not-coverage.md) | Acceptance criteria are not coverage | agent-proposed → human-accepted |
+| [0009](0009-allowlist-lives-in-the-launchd-plist.md) | The allowlist lives in the launchd plist | human |
+| [0010](0010-what-tells-the-watcher-a-track-changed.md) | The notification is the trigger; no poll ships | agent-proposed → human-accepted |
+| [0011](0011-fallback-works-in-both-directions.md) | The same-family fallback divides as well as multiplies | agent-proposed → human-accepted |
 
 [0001]: 0001-detect-via-scriptingbridge.md
 [0002]: 0002-match-rate-only.md
@@ -83,3 +105,6 @@ whether the thing does what you said; review asks what you failed to say.
 [0006]: 0006-build-rather-than-adopt.md
 [0007]: 0007-ci-compiles-not-typechecks.md
 [0008]: 0008-acceptance-criteria-are-not-coverage.md
+[0009]: 0009-allowlist-lives-in-the-launchd-plist.md
+[0010]: 0010-what-tells-the-watcher-a-track-changed.md
+[0011]: 0011-fallback-works-in-both-directions.md
