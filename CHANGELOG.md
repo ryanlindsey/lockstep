@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/ryanlindsey/lockstep/compare/v0.1.0...v0.1.1) (2026-09-05)
+
+
+### Documentation
+
+* add the phase 2 implementation plan ([#10](https://github.com/ryanlindsey/lockstep/issues/10)) ([1fd8b9f](https://github.com/ryanlindsey/lockstep/commit/1fd8b9f63fa6c053965490f82a114f28af54bf64))
+
 ## 0.1.0 (2026-08-31)
 
 
