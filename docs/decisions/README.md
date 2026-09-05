@@ -1,6 +1,6 @@
 # Decision log
 
-Eight records, one decision each, in a standard ADR shape with two extra fields.
+Thirteen records, one decision each, in a standard ADR shape with two extra fields.
 
 **`What we believed going in`.** A conventional ADR records the context and the
 conclusion, and quietly launders away what the author believed before the
@@ -62,6 +62,46 @@ the probe was wrong, the code was wrong. The third is the uncomfortable one,
 because it passed every check the first two exist to describe. Verification asks
 whether the thing does what you said; review asks what you failed to say.
 
+Phase 2 opened differently. It began by closing the two questions phase 1's
+design had left open — does `com.apple.Music.playerInfo` actually fire, and can
+a *compiled* binary read Music's rate or was that only ever true of `osascript`
+— and it closed both with probes before any switching logic existed to be
+designed around the answers ([0010]). Both came back as expected, which is the
+point: the loop ran ahead of the mistake instead of catching one, and the cost
+of finding out was two files and about two minutes. The design had already
+specified a polling fallback in case the notification proved unreliable; because
+the question got asked, that fallback is not in the codebase.
+
+The other two records of this phase are arguments rather than probes, and they
+run in opposite directions. [0009] refuses a config file for the device
+allowlist, on the grounds that the launchd plist is a configuration surface the
+reader already has to edit. [0011] is the first record here written against the
+design document itself: §8's fallback rule said to climb to an integer multiple,
+which silently strands a 96 kHz source on a 44.1/48-only device, so the
+implementation divides as well as multiplies. A specification is the source of
+truth about what was decided, not a guarantee that the decision was right.
+
+And then the phase closed the way phase 1 did. The acceptance test ran against a
+build that compiled clean under `-warnings-as-errors`, and two criteria failed:
+the reference DAC reports its own name with a trailing space, so an exact-match
+allowlist skipped the only device it was ever pointed at, on every evaluation,
+forever ([0012]). The log line was well-formed, named the right device, and gave
+a reason that was false. Reading the code would not have found it; the criterion
+that asked "does a skip name the device" did. Set that beside [0008], where nine
+passing criteria missed a crash, and the pair is the honest summary: acceptance
+criteria are not coverage, and they are not nothing either.
+
+The same test run then failed a criterion that was itself wrong ([0013]). Music
+emits its `playerInfo` notifications over a window about 500 ms wide — wider than
+the 400 ms debounce — so a burst of five skips legitimately produces two
+evaluations, and the plan's demand for exactly one could not be met by any
+implementation that does not also delay every ordinary track change. Both
+evaluations were no-ops; the device was never touched. Design §8 had asked for
+one *rate change*, which is what the criterion now counts. Three records in this
+phase are written against a document rather than a belief — [0011] against the
+design, [0012] against the spec, [0013] against the plan — and all three were
+found by running the thing rather than by reading it.
+
 ## The records
 
 | # | Decision | Decided by |
@@ -74,6 +114,11 @@ whether the thing does what you said; review asks what you failed to say.
 | [0006](0006-build-rather-than-adopt.md) | Build rather than adopt prior art | human-overrode-agent |
 | [0007](0007-ci-compiles-not-typechecks.md) | CI compiles rather than typechecks | agent-proposed → human-accepted |
 | [0008](0008-acceptance-criteria-are-not-coverage.md) | Acceptance criteria are not coverage | agent-proposed → human-accepted |
+| [0009](0009-allowlist-lives-in-the-launchd-plist.md) | The allowlist lives in the launchd plist | human |
+| [0010](0010-what-tells-the-watcher-a-track-changed.md) | The notification is the trigger; no poll ships | agent-proposed → human-accepted |
+| [0011](0011-fallback-works-in-both-directions.md) | The same-family fallback divides as well as multiplies | agent-proposed → human-accepted |
+| [0012](0012-device-names-are-matched-trimmed.md) | Device names are matched trimmed, because drivers pad them | agent-proposed → human-accepted |
+| [0013](0013-the-debounce-criterion-counts-rate-changes.md) | The debounce criterion counts rate changes, not evaluations | agent-proposed → human-accepted |
 
 [0001]: 0001-detect-via-scriptingbridge.md
 [0002]: 0002-match-rate-only.md
@@ -83,3 +128,8 @@ whether the thing does what you said; review asks what you failed to say.
 [0006]: 0006-build-rather-than-adopt.md
 [0007]: 0007-ci-compiles-not-typechecks.md
 [0008]: 0008-acceptance-criteria-are-not-coverage.md
+[0009]: 0009-allowlist-lives-in-the-launchd-plist.md
+[0010]: 0010-what-tells-the-watcher-a-track-changed.md
+[0011]: 0011-fallback-works-in-both-directions.md
+[0012]: 0012-device-names-are-matched-trimmed.md
+[0013]: 0013-the-debounce-criterion-counts-rate-changes.md

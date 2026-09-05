@@ -30,6 +30,8 @@ No Xcode project, no package manifest, no dependencies. One file.
 | `lockstep <unsupported-rate>` | Print supported rates to stderr, change nothing | 1 |
 | `lockstep <non-numeric>` | Print usage to stderr | 1 |
 | `lockstep --help` / `-h` | Print usage | 0 |
+| `lockstep --watch --devices "A,B"` | Follow Apple Music; set the rate when A or B is the default output | runs until killed |
+| `lockstep --watch` (no `--devices`) | Print that `--devices` is required, to stderr | 1 |
 
 ```
 $ lockstep
@@ -45,6 +47,26 @@ Note what `lockstep 96000` prints: the rate the **device reports back**, not the
 rate that was requested. `setRate` polls until the device confirms, because a
 `noErr` status is not proof the driver applied anything.
 
+## Watching
+
+`lockstep --watch` follows Apple Music: it wakes on
+`com.apple.Music.playerInfo`, waits out a 400 ms debounce, and sets the rate —
+but only when the default output device is one you named, and only when the rate
+actually needs changing. It runs until killed, which is what the launchd agent in
+[`launchd/README.md`](launchd/README.md) is for.
+
+```
+$ lockstep --watch --devices "CA DacMagic 200M 2.0"
+allowlist: CA DacMagic 200M 2.0
+watching:  com.apple.Music.playerInfo, 400 ms debounce
+2026-09-04T14:03:11Z  event  playerInfo
+2026-09-04T14:03:12Z  set    44100 Hz — verified
+2026-09-04T14:03:20Z  noop   already at 44100 Hz
+2026-09-04T14:03:31Z  skip   MacBook Pro Speakers is not in the allowlist
+```
+
+The verb is the second field, and the acceptance test parses it there.
+
 ## Acceptance tests
 
 Also from the repository root:
@@ -58,8 +80,19 @@ swiftc -O reference/lockstep.swift -o /tmp/lockstep
 > current rate, switches to a different supported one, verifies, and restores.
 > Expect a click at each change.
 
-It cannot run in CI — a build runner has no DAC, so every result there would be
-meaningless. CI compiles this code and never executes it.
+Phase 2 has its own:
+
+```
+./reference/test-lockstep-watch.sh /tmp/lockstep
+```
+
+> **This one also drives Apple Music.** It skips tracks, pauses, plays, and
+> changes the sample rate, then restores the rate and play state it found. Play
+> from a large playlist rather than a single album — it skips about nine tracks
+> and will otherwise run off the end of the queue.
+
+Neither can run in CI — a build runner has no DAC and no Apple Music, so every
+result there would be meaningless. CI compiles this code and never executes it.
 
 ## The menu bar half
 

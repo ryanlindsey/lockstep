@@ -28,4 +28,6 @@ jobs:
           done
 
       - name: Shell scripts parse
-        run: bash -n reference/test-lockstep.sh
+        run: |
+          bash -n reference/test-lockstep.sh
+          bash -n reference/test-lockstep-watch.sh

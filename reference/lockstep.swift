@@ -6,6 +6,8 @@
 //
 //   lockstep            print device, current rate, and supported rates
 //   lockstep 96000      set the rate to 96 kHz
+//   lockstep --watch --devices "A,B"
+//                       follow Apple Music onto an allowlisted device
 //   lockstep --help     usage
 //
 // This is the reference implementation. You do not need it — it is what the
@@ -15,6 +17,7 @@
 
 import CoreAudio
 import Foundation
+import ScriptingBridge
 
 func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
     AudioObjectPropertyAddress(
@@ -115,12 +118,206 @@ func formatted(_ rates: [Double]) -> String {
     rates.map { String(format: "%.0f", $0) }.joined(separator: ", ")
 }
 
+// --- phase 2: watching -------------------------------------------------------
+
+// Line-buffer stdout. launchd redirects it to a file, and a block-buffered
+// stream holds hours of events in memory before any of them reach the log —
+// including the events an acceptance test is sitting there waiting to read.
+// This is one line and it is not optional.
+func lineBufferStdout() {
+    setvbuf(stdout, nil, _IOLBF, 0)
+}
+
+let timestamps = ISO8601DateFormatter()
+
+// One line per event: timestamp, verb, reason. The verb is the second
+// whitespace-separated field, which is how test-lockstep-watch.sh reads it.
+// Keep that shape — see specs/phase-2-automatic-switching.md.
+func log(_ verb: String, _ reason: String) {
+    let padded = verb.padding(toLength: 5, withPad: " ", startingAt: 0)
+    print("\(timestamps.string(from: Date()))  \(padded)  \(reason)")
+}
+
+// The source seam. One protocol, one conformance, in this file, five lines.
+// It marks where a second source would attach and is not package architecture —
+// see docs/design/2026-08-30-repo-design.md §8. It returns play state and rate
+// together because the gate needs both, and asking Music twice to answer one
+// question costs an Apple Event for nothing.
+struct SourceState {
+    let isPlaying: Bool
+    let rate: Double?
+}
+
+protocol NowPlayingSource {
+    func currentState() -> SourceState?
+}
+
+// 'kPSP' — MusicEPlSPlaying. Player state arrives as a four-character code in
+// an NSNumber.
+let musicPlaying: UInt32 = 0x6B50_5350
+
+struct MusicSource: NowPlayingSource {
+    // SBObject dispatches valueForKey: against Music's sdef, so `player state`
+    // and `sample rate` are readable by name with no generated header — which
+    // matters, because a single file compiled with swiftc has nowhere to put
+    // one. Proven by probes/can-swift-read-music-rate.swift before it was
+    // written here.
+    func currentState() -> SourceState? {
+        guard let music = SBApplication(bundleIdentifier: "com.apple.Music") else { return nil }
+        // Never launch Music just to ask it a question.
+        guard music.isRunning else { return nil }
+        guard let state = (music.value(forKey: "playerState") as? NSNumber)?.uint32Value,
+              state == musicPlaying else {
+            return SourceState(isPlaying: false, rate: nil)
+        }
+        guard let track = music.value(forKey: "currentTrack") as? SBObject,
+              let hz = (track.value(forKey: "sampleRate") as? NSNumber)?.intValue,
+              hz > 0 else {
+            return SourceState(isPlaying: true, rate: nil)
+        }
+        return SourceState(isPlaying: true, rate: Double(hz))
+    }
+}
+
+// Same family only. 44.1 kHz material belongs at 44.1, 88.2 or 176.4; converting
+// it to 48 is the awkward resample lockstep exists to avoid. Multiples are tried
+// before divisors because integer upsampling discards nothing and decimation
+// does — see docs/decisions/0011-fallback-works-in-both-directions.md.
+func chooseRate(for source: Double, from ranges: [AudioValueRange]) -> Double? {
+    if supports(source, ranges) { return source }
+    for factor in [2.0, 4.0, 8.0] where supports(source * factor, ranges) {
+        return source * factor
+    }
+    for divisor in [2.0, 4.0] where supports(source / divisor, ranges) {
+        return source / divisor
+    }
+    return nil
+}
+
+// Comma-separated, and it lives in the LaunchAgent's ProgramArguments — see
+// docs/decisions/0009-allowlist-lives-in-the-launchd-plist.md. Returns nil for
+// a missing or empty list, which the caller turns into an exit rather than into
+// "watch everything".
+// CoreAudio hands back the name the driver reports, and drivers are not careful:
+// the reference DAC calls itself "CA DacMagic 200M 2.0 " — with a trailing space.
+// A reader who copies that name out of `lockstep` into the plist copies a
+// character they cannot see, and an exact match then fails forever with a log
+// line that looks correct. Both sides are trimmed so the invisible character
+// cannot decide anything — see
+// docs/decisions/0012-device-names-are-matched-trimmed.md.
+func matches(_ deviceName: String, _ allowed: [String]) -> Bool {
+    let target = deviceName.trimmingCharacters(in: .whitespaces)
+    return allowed.contains { $0.trimmingCharacters(in: .whitespaces) == target }
+}
+
+func allowlist(from arguments: [String]) -> [String]? {
+    guard let flag = arguments.firstIndex(of: "--devices") else { return nil }
+    let value = arguments.index(after: flag)
+    guard value < arguments.endIndex else { return nil }
+    let names = arguments[value]
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+    return names.isEmpty ? nil : names
+}
+
+func evaluate(_ source: NowPlayingSource, allowing allowed: [String]) {
+    guard let state = source.currentState() else {
+        log("skip", "Music is not running")
+        return
+    }
+    guard state.isPlaying else {
+        log("skip", "Music is not playing")
+        return
+    }
+    // The device is decided before the rate is. A device we were told not to
+    // touch is skipped for that reason whatever Music happens to be reporting,
+    // and mid-track-change Music reports no rate at all for a moment — so
+    // asking about the rate first makes the skip reason depend on timing.
+    //
+    // Re-read the device every time. The default output changes underneath a
+    // long-running agent — that is the whole point of the allowlist.
+    guard let device = defaultOutputDevice() else {
+        log("error", "no default output device")
+        return
+    }
+    let deviceName = name(of: device)
+    guard matches(deviceName, allowed) else {
+        log("skip", "\(deviceName) is not in the allowlist")
+        return
+    }
+    guard let sourceRate = state.rate else {
+        log("skip", "Music reports no sample rate for the current track")
+        return
+    }
+    let ranges = supportedRanges(of: device)
+    guard let target = chooseRate(for: sourceRate, from: ranges) else {
+        log("skip", "\(String(format: "%.0f", sourceRate)) Hz has no same-family match on \(deviceName)")
+        return
+    }
+    // The no-op guard is a correctness rule, not an optimisation: a set call is
+    // an audible dropout, and if Music emits a playerInfo in response to one,
+    // this is the line that stops the loop.
+    if let now = currentRate(of: device), now == target {
+        log("noop", "already at \(String(format: "%.0f", target)) Hz")
+        return
+    }
+    switch setRate(target, on: device) {
+    case .verified(let rate):
+        let note = rate == sourceRate
+            ? ""
+            : "  (source \(String(format: "%.0f", sourceRate)) Hz unsupported)"
+        log("set", "\(String(format: "%.0f", rate)) Hz — verified\(note)")
+    case .failed(let reason):
+        log("error", reason)
+    }
+}
+
+// 400 ms, superseded rather than queued. Five skips fire five notifications;
+// only the last evaluation should run, and it should read the track that is
+// actually playing by the time it does.
+let debounceSeconds = 0.4
+var generation = 0
+
+func scheduleEvaluation(_ source: NowPlayingSource, allowing allowed: [String]) {
+    generation += 1
+    let mine = generation
+    DispatchQueue.main.asyncAfter(deadline: .now() + debounceSeconds) {
+        guard mine == generation else { return }
+        evaluate(source, allowing: allowed)
+    }
+}
+
+func watch(allowing allowed: [String]) {
+    lineBufferStdout()
+    let source = MusicSource()
+    print("allowlist: \(allowed.joined(separator: ", "))")
+    print("watching:  com.apple.Music.playerInfo, \(Int(debounceSeconds * 1000)) ms debounce")
+
+    DistributedNotificationCenter.default().addObserver(
+        forName: NSNotification.Name("com.apple.Music.playerInfo"),
+        object: nil,
+        queue: .main
+    ) { _ in
+        log("event", "playerInfo")
+        scheduleEvaluation(source, allowing: allowed)
+    }
+
+    // Evaluate once at startup, so logging in mid-track does not leave the
+    // device mismatched until the next track boundary.
+    scheduleEvaluation(source, allowing: allowed)
+    RunLoop.main.run()
+}
+
 let usage = """
-usage: lockstep [<sample-rate> | --help]
+usage: lockstep [<sample-rate> | --watch --devices "<names>" | --help]
 
   lockstep            print the default output device, its current rate,
                       and every rate it supports
   lockstep 96000      set the default output device to 96000 Hz
+  lockstep --watch --devices "CA DacMagic 200M 2.0"
+                      follow Apple Music's sample rate, but only when one of
+                      the named devices is the default output
   lockstep --help     print this message
 """
 
@@ -130,6 +327,22 @@ func die(_ message: String) -> Never {
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
+
+// Above the device guard, deliberately. A watcher started at login before the
+// DAC has enumerated must not die on the spot — it logs an error per evaluation
+// and recovers when the device appears. The one-shot invocations below still
+// need the guard, so it stays exactly where it is.
+if arguments.first == "--watch" {
+    guard let allowed = allowlist(from: arguments) else {
+        die("""
+            --watch requires --devices with at least one device name
+
+            \(usage)
+            """)
+    }
+    watch(allowing: allowed)
+    exit(0)
+}
 
 guard let device = defaultOutputDevice() else {
     die("no default output device")

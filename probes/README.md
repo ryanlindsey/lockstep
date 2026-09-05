@@ -51,10 +51,82 @@ before watching it. A device that cannot hold a rate it advertises otherwise
 looks identical to macOS correcting it, and would tell you the opposite of the
 truth.
 
-## Why these two files repeat each other
+## Phase 2 probes
 
-Both files carry their own copy of the same ~40 lines of CoreAudio helpers, and
-`../reference/lockstep.swift` carries a third. That is deliberate.
+Two questions the phase-1 design left open, answered before phase 2's switching
+logic was designed around either. Both need Apple Music **playing** — not merely
+open. With nothing playing there is no track to read a rate from, and nothing to
+be notified about.
+
+### `does-music-notify.swift`
+
+Read-only and silent. It observes a notification for 60 seconds and changes
+nothing.
+
+```
+swiftc -O probes/does-music-notify.swift -o /tmp/does-music-notify
+/tmp/does-music-notify
+```
+
+Start Music playing, then skip five tracks in the first fifteen seconds, pause,
+wait, and play again. The probe prints each `com.apple.Music.playerInfo`
+notification as it arrives, with its arrival time and every key in its payload.
+
+Two outcomes:
+
+- **`RESULT: n notifications in 60 seconds. The notification fires.`** — the
+  notification is delivered here, and phase 2's trigger is
+  `DistributedNotificationCenter`. Read the payload keys as well as the count:
+  what the notification already carries decides what still has to be asked of
+  Music directly.
+- **`RESULT: nothing fired in 60 seconds.`** — exit 1. This is not a bug report
+  against the probe. It changes what phase 2 builds: the trigger becomes a 2 s
+  poll while playing instead of an observer. It is worth a probe report, because
+  it means the answer differs by machine.
+
+### `can-swift-read-music-rate.swift`
+
+Read-only, and it costs one Automation permission prompt the first time —
+grant it. It asks Music for its play state and the current track's sample rate
+by three different routes and reports which of them work.
+
+```
+swiftc -O probes/can-swift-read-music-rate.swift -o /tmp/can-swift-read-music-rate
+/tmp/can-swift-read-music-rate
+```
+
+Route C, the `osascript` subprocess, is the control. It is already known to
+work from [decision 0001](../docs/decisions/0001-detect-via-scriptingbridge.md),
+so it exists here to tell a broken route apart from a closed Music or a denied
+permission.
+
+Four outcomes:
+
+- **`RESULT: route A works.`** — ScriptingBridge plus KVC reads Music from a
+  compiled binary, so phase 2 needs no subprocess per event. This is the
+  expected result.
+- **`RESULT: route A failed, route B works.`** — phase 2 uses the `@objc`
+  protocol declarations instead, and why A failed is worth recording.
+- **`RESULT: only route C works.`** — phase 2 has to shell out to `osascript`
+  once per evaluation, which is a departure from the design and needs a decision
+  record before it is implemented.
+- **`RESULT: even the control failed.`** — exit 1. Music is not playing, or
+  Automation was denied. Nothing can be concluded about routes A or B until this
+  is fixed.
+
+Route B is reported as `unavailable — does not compile` on Swift 6.3.3, and the
+declarations that fail are kept commented in the file with the exact compiler
+error. That is the probe's answer for route B, not a defect in it: `@objc
+optional` requirements are reachable only through the protocol existential,
+never through the concrete conforming type.
+
+## Why these files repeat each other
+
+The two CoreAudio probes each carry their own copy of the same ~40 lines of
+helpers, and `../reference/lockstep.swift` carries a third. The two phase-2
+probes duplicate less because they touch less, but they follow the same rule:
+four Swift files in `probes/` and `reference/`, none of them importing another.
+That is deliberate.
 
 Each probe is self-contained so you can copy one file, compile it, and run it
 without cloning anything or reasoning about a shared module. For a repo whose
