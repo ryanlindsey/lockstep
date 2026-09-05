@@ -141,6 +141,31 @@ because a fork will hit it on its first `feat:` merge.
 `permissions:` blocks, so raising the default grants needless write access to
 `build.yml` and `links.yml` and buys nothing.
 
+### Why `.lycheeignore` excludes compare links
+
+The same shape of trap, one step further along. release-please writes its
+changelog heading as a compare link for the version it is *about to* create:
+
+```
+## [0.1.1](https://github.com/ryanlindsey/lockstep/compare/v0.1.0...v0.1.1)
+```
+
+`v0.1.1` does not exist until that pull request merges. So `links.yml`, running
+on the release pull request, checks whether a tag exists before the thing that
+creates it has run, and 404s — on every release, forever. The 0.1.0 release
+escaped it only because an initial version has no previous tag to compare
+against, which is why this surfaced on the second release rather than the first.
+
+`.lycheeignore` excludes that URL class, and states the cost in its own comment:
+a compare link written by hand in prose is no longer checked.
+
+**The exclusion was tested in both directions**, because a link checker that
+passes proves nothing about whether it would catch the failure it exists to
+prevent — see [0007](docs/decisions/0007-ci-compiles-not-typechecks.md). A
+temporary file carrying the exact failing link was pushed first and lychee
+failed on it; the exclusion was then added and lychee passed on the same file;
+the file was deleted. Both runs are on the pull request that added this.
+
 ## The rule that matters most
 
 **The specs are the source of truth. Changing an architectural choice requires
