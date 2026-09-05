@@ -99,3 +99,4 @@ there would be meaningless. CI compiles this code and never executes it.
   the need to look.
 - **Nothing here detects what is playing.** Phase 1 is a faster manual switch,
   not automation. You still choose the rate.
+  [Phase 2](phase-2-automatic-switching.md) is where that stops being true.
