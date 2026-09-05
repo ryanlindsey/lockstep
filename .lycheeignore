@@ -1,0 +1,15 @@
+# Links lychee should not check, with the reason. Regexes, one per line.
+
+# GitHub compare views between two release tags.
+#
+# release-please writes its changelog heading as a compare link for the version
+# it is about to create — `compare/v0.1.0...v0.1.1` — and that tag does not
+# exist until the release pull request merges. Checking it *on* that pull
+# request asks whether a tag exists before the thing that creates it has run,
+# so it 404s on every release, forever. The first release escaped it only
+# because an initial version has no previous tag to compare against.
+#
+# The cost of this line is that a compare link written by hand, in prose, is no
+# longer checked. That is a small and stated loss; the alternative is a link
+# checker that is red on every release PR and therefore ignored.
+https://github\.com/.+/compare/
