@@ -9,7 +9,7 @@ jobs:
   compile:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Compile only. Never execute: a GitHub runner has no USB DAC, so any
       # probe or lockstep output here would be meaningless.
