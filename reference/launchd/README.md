@@ -76,6 +76,28 @@ tail -f ~/Library/Logs/lockstep.log
 
 Expect an `event` line, and within about a second a `set`, `noop` or `skip`.
 
+To see it actually change something rather than report a `noop`, put the device
+deliberately out of step first and then skip a track:
+
+```
+lockstep 96000        # while a 44.1 kHz track is playing
+# skip a track in Music
+2026-09-05T06:45:11Z  event  playerInfo
+2026-09-05T06:45:11Z  set    44100 Hz — verified
+```
+
+**Surviving logout and login cannot be checked any other way than by doing it.**
+`launchctl kickstart -k` and a `bootout`/`bootstrap` cycle both restart the job
+without ending the login session, which is the thing being tested. Note the PID,
+log out, log back in, and compare:
+
+```
+launchctl print "gui/$(id -u)/me.ryanlindsey.lockstep" | awk '/pid = /{print $3}'
+```
+
+A different PID is a pass. The same PID means the session did not really end. No
+job at all means `RunAtLoad` or the bootstrap did not persist.
+
 ## Change the allowlist
 
 Edit the plist, then reload. Editing alone does nothing — launchd holds the
@@ -92,6 +114,18 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/me.ryanlindsey.lockste
 launchctl bootout "gui/$(id -u)/me.ryanlindsey.lockstep"
 rm ~/Library/LaunchAgents/me.ryanlindsey.lockstep.plist
 ```
+
+`bootout` exits 0 and prints nothing. Confirming it worked looks like a failure
+and is not:
+
+```
+$ launchctl print "gui/$(id -u)/me.ryanlindsey.lockstep"
+Bad request.
+Could not find service "me.ryanlindsey.lockstep" in domain for user gui: 501
+```
+
+That is `print` reporting a service that no longer exists, which is the answer
+you wanted.
 
 This leaves `~/bin/lockstep` and the phase 1 Shortcuts working. Removing phase 2
 does not undo phase 1 — the manual switch is still there, and is still the
