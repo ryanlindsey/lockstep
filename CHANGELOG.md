@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/ryanlindsey/lockstep/compare/v0.1.1...v0.2.0) (2026-09-05)
+
+
+### Spec changes
+
+* add phase 2 — automatic switching ([#13](https://github.com/ryanlindsey/lockstep/issues/13)) ([a44f0e4](https://github.com/ryanlindsey/lockstep/commit/a44f0e4bfed448420eab7c47439d10f07a01f03b))
+
 ## [0.1.1](https://github.com/ryanlindsey/lockstep/compare/v0.1.0...v0.1.1) (2026-09-05)
 
 
